@@ -1,0 +1,31 @@
+﻿namespace NiL.Cryptography.Tls;
+
+public enum AlertDescription : byte
+{
+    Close_notify = 0,
+    Unexpected_message = 10,
+    Bad_record_mac = 20,
+    Decryption_failed_RESERVED = 21,
+    Record_overflow = 22,
+    Decompression_failure = 30,
+    Handshake_failure = 40,
+    No_certificate_RESERVED = 41,
+    Bad_certificate = 42,
+    Unsupported_certificate = 43,
+    Certificate_revoked = 44,
+    Certificate_expired = 45,
+    Certificate_unknown = 46,
+    Illegal_parameter = 47,
+    Unknown_ca = 48,
+    Access_denied = 49,
+    Decode_error = 50,
+    Decrypt_error = 51,
+    Export_restriction_RESERVED = 60,
+    Protocol_version = 70,
+    Insufficient_security = 71,
+    Internal_error = 80,
+    Inappropriate_fallback = 86,
+    User_canceled = 90,
+    No_renegotiation = 100,
+    Unsupported_extension = 110,
+}
