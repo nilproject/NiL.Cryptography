@@ -182,7 +182,7 @@ internal unsafe class GHash
         return y;
     }
 
-    private unsafe void recalcH()
+    private void recalcH()
     {
         fixed (GcmFieldElement* h = &_h)
         {
@@ -230,7 +230,7 @@ internal unsafe class GHash
             }
         }
     }
-    private unsafe GcmFieldElement computeTz(ulong bbyte, ref GcmFieldElement v, int size = 4)
+    private GcmFieldElement computeTz(ulong bbyte, ref GcmFieldElement v, int size = 4)
     {
         //var originalBbyte = bbyte;
         //var b = default(GcmFieldElement);

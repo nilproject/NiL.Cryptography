@@ -201,7 +201,7 @@ public sealed class Des : IBlockCipher
         crypt(input, output, false);
     }
 
-    public unsafe void Encrypt(in Span<byte> input, in Span<byte> output)
+    public void Encrypt(in Span<byte> input, in Span<byte> output)
     {
         crypt(input, output, true);
     }
@@ -306,7 +306,7 @@ public sealed class Des : IBlockCipher
         return res;
     }
 
-    private static unsafe uint ff(uint v, ulong key)
+    private static uint ff(uint v, ulong key)
     {
         var e = permutation(E, v);
         e ^= key;

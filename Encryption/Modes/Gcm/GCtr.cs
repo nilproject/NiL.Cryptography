@@ -23,7 +23,7 @@ internal unsafe class GCtr
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private unsafe void gctr(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
+    private void gctr(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         var blockSize = _blockCipher.OutBlockSize;
         var ciph = stackalloc byte[blockSize];
@@ -78,7 +78,7 @@ internal unsafe class GCtr
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private unsafe void gctrSse2(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
+    private void gctrSse2(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         var blockSize = _blockCipher.OutBlockSize;
 

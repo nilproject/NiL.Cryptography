@@ -74,7 +74,7 @@ public partial class TlsSession
         _handshakeData = new BigEndianWriteBuffer(1024);
     }
 
-    public void Pump(int count)
+    public void Pump(int count, bool waitIncomming = false)
     {
         List<ArraySegment<byte>> segmentsToSend = null;
 
@@ -86,7 +86,7 @@ public partial class TlsSession
             {
                 if (_leftToRecieve != 0)
                 {
-                    tryToReceiveLeftBytes();
+                    tryToReceiveLeftBytes(waitIncomming);
 
                     if (_leftToRecieve != 0)
                         continue;
@@ -152,7 +152,7 @@ public partial class TlsSession
                     if (_recordsLayerInputStream.Position == _recordsLayerInputStream.Length)
                         _recordsLayerInputStream.SetLength(0);
                 }
-                else if (!tryReadNextHeader())
+                else if (!tryReadNextHeader(waitIncomming))
                     break;
 
                 if (count > 1 && _socket.Available == 0)
@@ -216,16 +216,17 @@ public partial class TlsSession
         }
     }
 
-    public unsafe void SendAlert(Alert alert)
+    public void SendAlert(Alert alert)
     {
         lock (_outputDataBuffer)
         {
             _outputDataBuffer.ResetSize();
 
-            var data = new byte[sizeof(Alert)];
-
-            for (var i = 0; i < data.Length; i++)
-                data[i] = ((byte*)&alert)[i];
+            var data = new byte[2]
+            {
+                (byte)alert.Level,
+                (byte)alert.Description,
+            };
 
             var segments = new List<ArraySegment<byte>>();
             prepareRecordsForSend(segments,
@@ -564,9 +565,9 @@ public partial class TlsSession
         };
     }
 
-    private bool tryReadNextHeader()
+    private bool tryReadNextHeader(bool wait)
     {
-        if (_socket.Available < 5)
+        if (_socket.Available < 5 && !wait)
             return false;
 
         var contentType = (TlsContentType)_srcReader.UInt8();
@@ -581,7 +582,7 @@ public partial class TlsSession
         return true;
     }
 
-    private void tryToReceiveLeftBytes()
+    private void tryToReceiveLeftBytes(bool wait)
     {
         if (_leftToRecieve != 0)
         {
@@ -591,7 +592,7 @@ public partial class TlsSession
                 _recordsLayerInputStream.Capacity = received + _leftToRecieve;
 
             var client = _socket;
-            while (_leftToRecieve != 0 && client.Available != 0)
+            while (_leftToRecieve != 0 && (client.Available != 0 || wait))
             {
                 var inputBuffer = _recordsLayerInputStream.GetBuffer();
                 var toReceive = Math.Min(_leftToRecieve, Math.Min(inputBuffer.Length - received, client.Available));
@@ -606,7 +607,7 @@ public partial class TlsSession
         }
     }
 
-    private unsafe HandshakeRecord writeKeyExchange()
+    private HandshakeRecord writeKeyExchange()
     {
         switch (CipherSuite.KeyExchangeAlgorithm.Id)
         {
@@ -626,7 +627,7 @@ public partial class TlsSession
                 }
                 else
                     throw new NotImplementedException();
-                
+
                 _ephemeralKeysSet = CipherSuite.KeyExchangeAlgorithm.DeriveEphemeralKeys(null);
 
                 // ECPoint
@@ -733,7 +734,7 @@ public partial class TlsSession
         };
     }
 
-    private unsafe HandshakeRecord writeCertificate()
+    private HandshakeRecord writeCertificate()
     {
         if (TlsVersion is TlsVersion.Tls13)
         {
@@ -810,11 +811,8 @@ public partial class TlsSession
         // content https://tools.ietf.org/html/rfc5246#section-7.4.1.3
         contentBuf.Uint16((ushort)TlsVersion.Tls12); // even for Tls 1.3
 
-        unsafe
-        {
-            var serverRandom = ServerRandom;
-            contentBuf.Bytes(serverRandom.Opaque);
-        }
+        var serverRandom = ServerRandom;
+        contentBuf.Bytes(serverRandom.Opaque);
 
         if (TlsVersion is TlsVersion.Tls13)
         {
@@ -867,7 +865,7 @@ public partial class TlsSession
                 if (clientSupporedGroups.NamedGroups[i] == selectedGroupId)
                 {
                     _keyExchangeParams = clientKeyShare.KeyExchangeParams.First(x => x.NamedCurve == selectedGroupId);
-                    
+
                     _ephemeralKeysSet = CipherSuite.KeyExchangeAlgorithm.DeriveEphemeralKeys(_keyExchangeParams);
                     keyShareData = (clientSupporedGroups.NamedGroups[i], _ephemeralKeysSet.PublicKey);
 
@@ -1230,10 +1228,13 @@ public partial class TlsSession
 
         selectCipherSuite(_clientExtensions.OfType<SupportedGroupsExtension>().FirstOrDefault());
 
-        TlsVersion = CipherSuite.TlsVersions.Max();
-
         if (CipherSuite == null || CipherSuite == null || CipherSuite.CipherSuiteId == CipherSuiteId.Unknown)
-            throw new InvalidOperationException("No known cipher suite. Client cipher suites: " + string.Join(Environment.NewLine, ClientCipherSuites.Select(x => x.ToString("x4"))));
+        {
+            SendAlert(new Alert() { Description = AlertDescription.Handshake_failure, Level = AlertLevel.Fatal });
+            throw new InvalidOperationException("No known cipher suite. Client cipher suites: " + string.Join(Environment.NewLine, ClientCipherSuites));
+        }
+
+        TlsVersion = CipherSuite.TlsVersions.Max();
 
         generateServerRandom();
         selectApplicationLayerProtocol();

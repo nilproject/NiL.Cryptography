@@ -20,7 +20,7 @@ public
 #else
 internal
 #endif
-    unsafe static class NumericsBase
+    static unsafe class NumericsBase
 {
     public static ulong Mul(uint* left, uint* right, uint* result, int length)
     {
@@ -236,9 +236,18 @@ internal
                 {
                     l = &x[i];
                     yv = l[0];
+
                     res = &result[i << 1];
 
-                    v = yv * yv + *res;
+                    v = yv * yv;
+
+                    if (res >= resultEnd)
+                    {
+                        overflow += v;
+                        break;
+                    }
+
+                    v += *res;
                     *res = (uint)v;
                     o = v >> 32;
 
@@ -705,7 +714,7 @@ internal
         return;
     }
 
-    //[SkipLocalsInit]
+    [SkipLocalsInit]
     public static void Mod(uint* left, uint* mod, int length)
     {
 
@@ -852,7 +861,7 @@ internal
         }
     }
 
-    [SkipLocalsInit]
+    //[SkipLocalsInit]
     public static void ModInverse(uint* x, uint* mod, uint* result, int length)
     {
         if (length == 0)

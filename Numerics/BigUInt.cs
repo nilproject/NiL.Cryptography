@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
-using NiL.Cryptography.EllipticCryptography.WeierstrassForm;
 
 namespace NiL.Cryptography.Numerics;
 
@@ -405,6 +405,17 @@ public unsafe struct BigUInt<TSize> : IBigUInt, IBigUIntInternal where TSize : I
     uint[] IBigUIntInternal.GetRawBuffer() => GetRawBuffer();
 
     internal uint[] GetRawBuffer() => _uints;
+
+    public BigInteger ToBigInteger()
+    {
+        unsafe
+        {
+            fixed (uint* pData = _uints)
+            {
+                return new(new ReadOnlySpan<byte>(pData, _uints.Length * 4));
+            }
+        }
+    }
 
     public byte[] ToBytes(int maxLength = int.MaxValue, bool bigEndian = false)
     {

@@ -8,9 +8,12 @@ namespace NiL.Cryptography.Tls;
 public sealed class TlsStream : Stream
 {
     private int _bufferPos;
+    private bool _closed;
     private readonly Queue<byte[]> _inputApplicationDataBuffers;
     private readonly TlsSession _session;
     private readonly MemoryStream _outgoingBuffer;
+
+    public TimeSpan ReceiveTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     internal TlsStream(TlsSession session)
     {
@@ -21,8 +24,16 @@ public sealed class TlsStream : Stream
 
     protected override void Dispose(bool disposing)
     {
+        if (_closed)
+            return;
+
         lock (_outgoingBuffer)
         {
+            if (_closed)
+                return;
+
+            _closed = true;
+
             Flush();
 
             _outgoingBuffer.Dispose();
@@ -44,7 +55,7 @@ public sealed class TlsStream : Stream
     {
         get
         {
-            if (_inputApplicationDataBuffers.Count <= 1)
+            if (_inputApplicationDataBuffers.Count < 1)
                 _session.Pump(1);
 
             lock (_inputApplicationDataBuffers)
@@ -66,6 +77,9 @@ public sealed class TlsStream : Stream
 
     public override void Flush()
     {
+        if (_outgoingBuffer.Length == 0)
+            return;
+
         lock (_outgoingBuffer)
         {
             if (_outgoingBuffer.Length == 0)
@@ -84,14 +98,22 @@ public sealed class TlsStream : Stream
         if (count + offset > buffer.Length)
             throw new ArgumentOutOfRangeException();
 
+        var start = Environment.TickCount64;
         var i = 0;
         while (i < count)
         {
-            if (_inputApplicationDataBuffers.Count == 0)
-                _session.Pump(1);
+            do
+            {
+                _session.Pump(1, _inputApplicationDataBuffers.Count == 0 && i == 0);
+            }
+            while (_inputApplicationDataBuffers.Count == 0
+                    && i == 0
+                    && Environment.TickCount64 - start < ReceiveTimeout.TotalMilliseconds);
 
-            if (_inputApplicationDataBuffers.Count == 0)
-                break;
+            if (_inputApplicationDataBuffers.Count == 0 && i == 0)
+            {
+                return 0;
+            }
 
             lock (_inputApplicationDataBuffers)
             {
@@ -130,13 +152,13 @@ public sealed class TlsStream : Stream
         {
             _outgoingBuffer.Write(buffer);
 
-            if (_outgoingBuffer.Length > 65535)
+            //if (_outgoingBuffer.Length > 65535)
             {
                 Flush();
             }
         }
     }
 
-    public override void Write(byte[] buffer, int offset, int count) 
+    public override void Write(byte[] buffer, int offset, int count)
         => Write(new ReadOnlySpan<byte>(buffer, offset, count));
 }

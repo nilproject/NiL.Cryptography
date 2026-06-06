@@ -411,7 +411,7 @@ public sealed class RC2 : IBlockCipher
         }
     }
 
-    private unsafe void prologue(Span<byte> input, in Span<byte> output)
+    private void prologue(Span<byte> input, in Span<byte> output)
     {
         if (input.Length != 8)
             throw new ArgumentException(nameof(input));
@@ -429,7 +429,7 @@ public sealed class RC2 : IBlockCipher
             output[i] = input[i];
     }
 
-    private unsafe void expandKey(byte[] l, int t8, int tm, int len)
+    private void expandKey(byte[] l, int t8, int tm, int len)
     {
         for (var i = len; i < 128; i++)
             l[i] = PiTable[l[i - 1] + l[i - len] & 0xff];

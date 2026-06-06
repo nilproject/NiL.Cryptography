@@ -5,7 +5,6 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using NiL.Cryptography.EllipticCryptography;
 using NiL.Cryptography.EllipticCryptography.WeierstrassForm.Signature;
-using NiL.Cryptography.Hashing;
 using NiL.Cryptography.Numerics;
 using NiL.Cryptography.Pkcs;
 using NiL.Cryptography.Pkcs.Attributes;
@@ -122,7 +121,7 @@ public sealed class TlsManager
                     {
                         ecdsa = new WeierstrassEcdsa(BigUInt<B512>.FromBytes(privateKey, true),
                                             signCurve,
-                                            Sha256.Instance,
+                                            Hashing.Sha256.Instance,
                                             RandomNumberGenerator.Create(),
                                             SignatureScheme.ecdsa_secp256r1_sha256);
                         break;

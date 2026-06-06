@@ -66,7 +66,7 @@ public sealed class Sha1 : IHashFunction
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    public unsafe struct Result
+    public struct Result
     {
         [FieldOffset(0)]
         public readonly FixedUint32Array AsUint32;

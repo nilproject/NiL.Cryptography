@@ -6,7 +6,7 @@ namespace NiL.Cryptography.EllipticCryptography.MontgomeryForm
 {
     // https://martin.kleppmann.com/papers/curve25519.pdf
     // https://datatracker.ietf.org/doc/html/rfc7748
-    public unsafe sealed class X25519CurvePoint : ICurvePoint
+    public sealed class X25519CurvePoint : ICurvePoint
     {
         private X25519Curve _curve;
 

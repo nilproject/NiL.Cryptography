@@ -14,7 +14,7 @@ public sealed class Aes : IBlockCipher
     [StructLayout(LayoutKind.Sequential, Pack = 1, Size = 1)]
     public struct FieldElement
     {
-        private readonly static byte[] _PrecomputedMul = new byte[256 * 256];
+        private static readonly byte[] _PrecomputedMul = new byte[256 * 256];
 
         static FieldElement()
         {

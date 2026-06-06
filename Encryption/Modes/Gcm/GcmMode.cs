@@ -76,7 +76,7 @@ public sealed class GcmMode : IAeadCipher
         }
     }
 
-    public unsafe void Decrypt(
+    public void Decrypt(
         in ReadOnlySpan<byte> authData,
         in ReadOnlySpan<byte> iv,
         in ReadOnlySpan<byte> input,
@@ -86,7 +86,7 @@ public sealed class GcmMode : IAeadCipher
         crypt(false, authData, iv, input, output, authTag);
     }
 
-    public unsafe void Encrypt(
+    public void Encrypt(
         in ReadOnlySpan<byte> authData,
         in ReadOnlySpan<byte> iv,
         in ReadOnlySpan<byte> input,

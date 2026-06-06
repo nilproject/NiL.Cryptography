@@ -76,7 +76,7 @@ public class Sha256 : IHashFunction
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    public unsafe struct Result
+    public struct Result
     {
         [FieldOffset(0)]
         public readonly FixedUint32Array AsUint32;
@@ -128,7 +128,7 @@ public class Sha256 : IHashFunction
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint s1(uint x) => rightRotate(17, x) ^ rightRotate(19, x) ^ (x >> 10);
 
-    public unsafe static Result Compute(in ReadOnlySpan<byte> message)
+    public static unsafe Result Compute(in ReadOnlySpan<byte> message)
     {
         var messageLen = message.Length;
         var additionalSize = (((512 + (448 - ((messageLen * 8L + 1) % 512))) % 512) + 64 + 1) / 8;
