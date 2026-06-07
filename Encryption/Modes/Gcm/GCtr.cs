@@ -2,12 +2,15 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
 
 internal unsafe class GCtr
 {
     private readonly IBlockCipher _blockCipher;
+    private static readonly bool isSse2Supported = Sse2.IsSupported;
+    private static readonly bool isArmSimdSupported = AdvSimd.IsSupported;
 
     public GCtr(IBlockCipher blockCipher)
     {
@@ -16,8 +19,10 @@ internal unsafe class GCtr
 
     public void Invoke(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
     {
-        if (Sse2.IsSupported)
+        if (isSse2Supported)
             gctrSse2(counter, input, output);
+        else if (isArmSimdSupported)
+            gctrArmSimd(counter, input, output);
         else
             gctr(counter, input, output);
     }
@@ -77,7 +82,6 @@ internal unsafe class GCtr
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void gctrSse2(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         var blockSize = _blockCipher.OutBlockSize;
@@ -101,6 +105,60 @@ internal unsafe class GCtr
                     _blockCipher.Encrypt(counterSpan, encodedCounterSpan);
 
                     *(Vector128<byte>*)&pOutput[dataIndex] = Sse2.Xor(*(Vector128<byte>*)encodedCounterBytes, *(Vector128<byte>*)&pInput[dataIndex]);
+                    dataIndex += 16;
+
+                    for (var c = 16; c-- > 0 && ++counterBytes[c] == 0;) ;
+                }
+
+                if (dataIndex < input.Length)
+                {
+                    _blockCipher.Encrypt(counterSpan, encodedCounterSpan);
+
+                    for (var j = 0; dataIndex < input.Length; dataIndex++, j++)
+                        output[dataIndex] = (byte)(encodedCounterBytes[j] ^ input[dataIndex]);
+
+                    for (var j = 16; j-- > 0 && ++counterBytes[j] == 0;) ;
+                }
+            }
+            else
+            {
+                var n = (input.Length + (blockSize - 1)) / blockSize;
+                for (var i = 0; i < n; i++)
+                {
+                    _blockCipher.Encrypt(counterSpan, encodedCounterSpan);
+
+                    for (var j = 0; j < blockSize && dataIndex < input.Length; dataIndex++, j++)
+                        output[dataIndex] = (byte)(encodedCounterBytes[j] ^ input[dataIndex]);
+
+                    for (var j = 16; j-- > 0 && ++counterBytes[j] == 0;) ;
+                }
+            }
+        }
+    }
+
+    private void gctrArmSimd(in GcmFieldElement counter, in ReadOnlySpan<byte> input, in Span<byte> output)
+    {
+        var blockSize = _blockCipher.OutBlockSize;
+
+        var encodedCounterBytes = stackalloc byte[blockSize];
+        var encodedCounterSpan = new Span<byte>(encodedCounterBytes, blockSize);
+
+        var counterBytes = stackalloc byte[blockSize];
+        var counterSpan = new Span<byte>(counterBytes, blockSize);
+        *(GcmFieldElement*)counterBytes = counter;
+
+        var dataIndex = 0;
+
+        fixed (byte* pOutput = output)
+        fixed (byte* pInput = input)
+        {
+            if (blockSize == 16)
+            {
+                for (var i = input.Length >> 4; i-- > 0;)
+                {
+                    _blockCipher.Encrypt(counterSpan, encodedCounterSpan);
+
+                    *(Vector128<byte>*)&pOutput[dataIndex] = AdvSimd.Xor(*(Vector128<byte>*)encodedCounterBytes, *(Vector128<byte>*)&pInput[dataIndex]);
                     dataIndex += 16;
 
                     for (var c = 16; c-- > 0 && ++counterBytes[c] == 0;) ;

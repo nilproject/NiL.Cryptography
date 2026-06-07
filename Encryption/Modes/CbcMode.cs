@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 
 namespace NiL.Cryptography.Encryption.Modes;
@@ -7,6 +8,8 @@ namespace NiL.Cryptography.Encryption.Modes;
 public sealed class CbcMode : IBlockCipher
 {
     private readonly byte[] _iv;
+    private static readonly bool isSse2Supported = Sse2.IsSupported;
+    private static readonly bool isSimdSupported = AdvSimd.IsSupported;
 
     public CbcMode(IBlockCipher blockCipher)
         : this(blockCipher, new byte[blockCipher.InputBlockSize])
@@ -43,7 +46,7 @@ public sealed class CbcMode : IBlockCipher
         var inputBlock = new byte[BlockCipher.InputBlockSize];
 
         var inputBlockSize = BlockCipher.InputBlockSize;
-        var outputBlockSize = BlockCipher.InputBlockSize;
+        var outputBlockSize = BlockCipher.OutBlockSize;
 
         unsafe
         {
@@ -60,7 +63,7 @@ public sealed class CbcMode : IBlockCipher
 
                 for (int inputPos = 0, outPos = 0; inputPos < input.Length; inputPos += inputBlock.Length)
                 {
-                    if (inputBlockSize != 16 || !Sse2.IsSupported)
+                    if (inputBlockSize != 16 || (!isSse2Supported && !isSimdSupported))
                     {
                         var fillStart = Math.Min(inputBlockSize, input.Length - inputPos);
                         Array.Clear(inputBlock, fillStart, inputBlock.Length - fillStart);
@@ -68,14 +71,18 @@ public sealed class CbcMode : IBlockCipher
                         for (var i = 0; i < inputBlockSize; i++)
                             inputBlock[i] = (byte)(inputPtr[i] ^ ivp[i]);
                     }
-                    else
+                    else if (isSse2Supported)
                     {
                         *(Vector128<byte>*)ibp = Sse2.Xor(*(Vector128<byte>*)inputPtr, *(Vector128<byte>*)ivp);
+                    }
+                    else
+                    {
+                        *(Vector128<byte>*)ibp = AdvSimd.Xor(*(Vector128<byte>*)inputPtr, *(Vector128<byte>*)ivp);
                     }
 
                     inputPtr += inputBlockSize;
 
-                    blockCipher.Encrypt(inputBlock, new Span<byte>(outputPtr, BlockCipher.OutBlockSize));
+                    blockCipher.Encrypt(inputBlock, new Span<byte>(outputPtr, outputBlockSize));
 
                     if (inputBlockSize != 16)
                     {

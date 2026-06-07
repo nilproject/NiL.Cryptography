@@ -1,12 +1,13 @@
 ﻿using System;
-using System.Runtime.Intrinsics.X86;
-using System.Runtime.Intrinsics;
-using AesNi = System.Runtime.Intrinsics.X86.Aes;
 using System.Diagnostics;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+using System.Security.Cryptography;
+using AesNi = System.Runtime.Intrinsics.X86.Aes;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
 
-internal unsafe class AesGcmHw
+internal unsafe class AesGcmHwX86 : IAesGcmHwBase
 {
     private readonly bool _isCarryLessMulSupported = Pclmulqdq.IsSupported;
     //private readonly bool _isCarryLessMulSupported = false;
@@ -17,7 +18,7 @@ internal unsafe class AesGcmHw
     private readonly GCtr _gCtr;
     private readonly Aes _aes;
 
-    public AesGcmHw(GHash gHash, GCtr gCtr, Aes aes)
+    public AesGcmHwX86(GHash gHash, GCtr gCtr, Aes aes)
     {
         _gHash = gHash;
         _gCtr = gCtr;
@@ -98,7 +99,7 @@ internal unsafe class AesGcmHw
         ((ulong*)&mask)[0] = 0x08_09_0a_0b_0c_0d_0e_0f;
         ((ulong*)&mask)[1] = 0x00_01_02_03_04_05_06_07;
         var ghash = _isCarryLessMulSupported ? Ssse3.Shuffle(*(Vector128<byte>*)&gHash, *(Vector128<byte>*)&mask) : *(Vector128<byte>*)&gHash;
-        
+
         Vector128<byte> key = default;
 
         fixed (GcmFieldElement* zPreComputed0 = _gHash.ZPreComputed)
@@ -106,6 +107,7 @@ internal unsafe class AesGcmHw
         fixed (byte* pInput = input)
         fixed (uint* keySchedule = _aes._keySchedule)
         {
+            if (_isCarryLessMulSupported)
             {
                 var mul = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vv2, e1ul2, 0);
                 vv2.L[0] = vv2.L[1] ^ mul[0] << 55;
@@ -116,9 +118,9 @@ internal unsafe class AesGcmHw
 
             switch (keySize)
             {
-                case 0: Aes.hwEncrypt10(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
-                case 1: Aes.hwEncrypt12(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
-                case 2: Aes.hwEncrypt14(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
+                case 0: Aes.X86Encrypt10(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
+                case 1: Aes.x86Encrypt12(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
+                case 2: Aes.X86Encrypt14(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
             }
 
             if (++counterBytes[15] == 0
@@ -159,7 +161,7 @@ internal unsafe class AesGcmHw
                 ((ulong*)counterBytes)[0] ^= *(ulong*)&keySchedule[0];
                 ((uint*)counterBytes)[2] ^= keySchedule[2];
 
-                for (var k = 1; k <= 9; k += 3)
+                for (var k = 1; k <= 7; k += 3)
                 {
                     var ks0 = *(Vector128<byte>*)&keySchedule[4 * k];
                     var ks1 = *(Vector128<byte>*)&keySchedule[4 * (k + 1)];
@@ -262,36 +264,35 @@ internal unsafe class AesGcmHw
 
                 if (_isCarryLessMulSupported)
                 {
+                    outputVector = *(Vector128<byte>*)&vv2;
+
                     var shuffled = Sse2.Xor(ghash, Ssse3.Shuffle(inputVector, *(Vector128<byte>*)&mask));
 
                     inputVector = *(Vector128<byte>*)&vv;
-                    outputVector = *(Vector128<byte>*)&vv2;
 
                     var product0 = Sse2.Xor(
                         Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x10),
                         Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x00));
+
+                    var product1 = Sse2.Xor(
+                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x11),
+                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x01));
 
                     var data = default(GcmFieldElement);
                     Sse2.Store((byte*)&data, *(Vector128<byte>*)&product0);
                     var low = data.L[0];
                     var high = data.L[1];
 
-                    var product1 = Sse2.Xor(
-                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x11),
-                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x01));
+                    product0 = Sse2.ShiftRightLogical(Sse2.ShiftLeftLogical(product0, 1), 1);
+                    product0 = Sse2.ShiftLeftLogical128BitLane(Pclmulqdq.CarrylessMultiply(product0, e1ul2, 0), 7);
 
                     Sse2.Store((byte*)&data, *(Vector128<byte>*)&product1);
-
                     high ^= data.L[0];
                     var high1 = data.L[1];
 
-                    product0 = Sse2.ShiftRightLogical(Sse2.Add(product0, product0), 1);
-                    product0 = Sse2.ShiftLeftLogical128BitLane(Pclmulqdq.CarrylessMultiply(product0, e1ul2, 0), 7);
-                    Sse2.Store((byte*)&data, *(Vector128<byte>*)&product0);
-
-                    *(Vector128<ulong>*)&ghash = Vector128.Create(
-                        (high + high) ^ low >> 63 ^ data.L[0],
-                        (high1 + high1) ^ high >> 63 ^ data.L[1]);
+                    *(Vector128<ulong>*)&ghash = Sse2.Xor(
+                        product0,
+                        Vector128.Create((high + high) ^ low >> 63, (high1 + high1) ^ high >> 63));
                 }
                 else
                 {
@@ -331,7 +332,8 @@ internal unsafe class AesGcmHw
                     t = Sse2.Xor(t, Sse2.Xor(zprec0[0xff & x0 >> 32], zprec1[0xff & x1 >> 32]));
                     t = Sse2.Xor(t, Sse2.Xor(zprec0[0xff & x0 >> 40], zprec1[0xff & x1 >> 40]));
                     t = Sse2.Xor(t, Sse2.Xor(zprec0[0xff & x0 >> 48], zprec1[0xff & x1 >> 48]));
-                    ghash = Sse2.Xor(t, Sse2.Xor(zprec0[0xff & x0 >> 56], zprec1[0xff & x1 >> 56]));
+                    t = Sse2.Xor(t, Sse2.Xor(zprec0[0xff & x0 >> 56], zprec1[0xff & x1 >> 56]));
+                    ghash = t;
                 }
             }
 

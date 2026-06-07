@@ -5,12 +5,21 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using AesNi = System.Runtime.Intrinsics.X86.Aes;
+using AesNeon = System.Runtime.Intrinsics.Arm.Aes;
+using System.Runtime.Intrinsics.Arm;
 
 namespace NiL.Cryptography.Encryption;
 
 // https://csrc.nist.gov/csrc/media/publications/fips/197/final/documents/fips-197.pdf
 public sealed class Aes : IBlockCipher
 {
+    public enum AccelerationMode
+    {
+        Software,
+        X86_AesNi,
+        Arm_Neon
+    }
+
     [StructLayout(LayoutKind.Sequential, Pack = 1, Size = 1)]
     public struct FieldElement
     {
@@ -169,7 +178,7 @@ public sealed class Aes : IBlockCipher
 
     public int OutBlockSize => 16;
 
-    private readonly bool _useAesNi;
+    public readonly AccelerationMode Mode;
 
     public byte[] Key
     {
@@ -221,10 +230,16 @@ public sealed class Aes : IBlockCipher
     private int _nr;
 
     private static readonly bool _NiSupported = AesNi.IsSupported;
+    private static readonly bool _NeonSupported = AesNeon.IsSupported;
 
     public Aes(byte[] key, bool allowAesNi = true)
     {
-        _useAesNi = allowAesNi && _NiSupported;
+        Mode = allowAesNi switch
+        {
+            true when _NiSupported => AccelerationMode.X86_AesNi,
+            true when _NeonSupported => AccelerationMode.Arm_Neon,
+            _ => AccelerationMode.Software,
+        };
         Key = key ?? throw new ArgumentNullException(nameof(key));
     }
 
@@ -249,32 +264,52 @@ public sealed class Aes : IBlockCipher
             var w = ksp;
             w += _Nb * _nr;
 
-            if (_useAesNi)
+            switch (Mode)
             {
-                Vector128<byte> vectorState;
-
-                if (_Sse2Supported)
+                case AccelerationMode.X86_AesNi:
                 {
+                    Vector128<byte> vectorState;
+
                     vectorState = Sse2.Xor(*(Vector128<byte>*)inputPtr, *(Vector128<byte>*)w);
+
+                    w -= _Nb;
+
+                    for (var i = _nr; i-- > 1; w -= _Nb)
+                        vectorState = AesNi.Decrypt(vectorState, *(Vector128<byte>*)w);
+
+                    *(Vector128<byte>*)outputPtr = AesNi.DecryptLast(vectorState, *(Vector128<byte>*)w);
+                    break;
                 }
-                else
-                {
-                    Vector128<byte> t = default;
-                    ((ulong*)&t)[0] = ((ulong*)inputPtr)[0] ^ ((ulong*)ksp)[0];
-                    ((ulong*)&t)[1] = ((ulong*)inputPtr)[1] ^ ((ulong*)ksp)[1];
-                    vectorState = t;
-                }
 
-                w -= _Nb;
+                //case AccelerationMode.Arm_Neon:
+                //{
+                //    Vector128<byte> vectorState;
 
-                for (var i = _nr; i-- > 1; w -= _Nb)
-                    vectorState = AesNi.InverseMixColumns(AesNi.DecryptLast(vectorState, *(Vector128<byte>*)w));
+                //    if (AdvSimd.IsSupported)
+                //    {
+                //        vectorState = AdvSimd.Xor(*(Vector128<byte>*)inputPtr, *(Vector128<byte>*)w);
+                //    }
+                //    else
+                //    {
+                //        Vector128<byte> t = default;
+                //        ((ulong*)&t)[0] = ((ulong*)inputPtr)[0] ^ ((ulong*)ksp)[0];
+                //        ((ulong*)&t)[1] = ((ulong*)inputPtr)[1] ^ ((ulong*)ksp)[1];
+                //        vectorState = t;
+                //    }
 
-                *(Vector128<byte>*)outputPtr = AesNi.DecryptLast(vectorState, *(Vector128<byte>*)w);
-            }
-            else
-            {
-                softwareDecrypt(inputPtr, outputPtr, w);
+                //    w -= _Nb;
+
+                //    for (var i = _nr; i-- > 1; w -= _Nb)
+                //        vectorState = AesNeon.InverseMixColumns(AesNeon.Decrypt(vectorState, *(Vector128<byte>*)w));
+
+                //    *(Vector128<byte>*)outputPtr = AesNeon.Decrypt(vectorState, *(Vector128<byte>*)w);
+
+                //    break;
+                //}
+
+                default:
+                    softwareDecrypt(inputPtr, outputPtr, w);
+                    break;
             }
         }
     }
@@ -315,36 +350,98 @@ public sealed class Aes : IBlockCipher
         fixed (byte* inputPtr = input)
         fixed (byte* outputPtr = output)
         {
-            if (_useAesNi)
+            switch (Mode)
             {
-                UnsafeEncryptHw(inputPtr, outputPtr, _keySchedule);
-            }
-            else
-            {
-                fixed (uint* ksp = _keySchedule)
+                case AccelerationMode.X86_AesNi:
+                    EncryptX86(inputPtr, outputPtr, _keySchedule);
+                    break;
+
+                case AccelerationMode.Arm_Neon:
+                    EncryptArm(inputPtr, outputPtr);
+                    break;
+
+                default:
                 {
-                    softwareEncrypt(ksp, inputPtr, outputPtr);
+                    fixed (uint* ksp = _keySchedule)
+                    {
+                        softwareEncrypt(ksp, inputPtr, outputPtr);
+                    }
+
+                    break;
                 }
             }
         }
     }
-    
+
+    public unsafe void EncryptArm(byte* inputPtr, byte* outputPtr)
+    {
+        fixed (uint* ksp = _keySchedule)
+        {
+            var vectorW = (byte*)ksp;
+            var vectorState = AesNeon.Encrypt(*(Vector128<byte>*)inputPtr, *(Vector128<byte>*)vectorW);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 1]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 2]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 3]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 4]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 5]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 6]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 7]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 8]);
+            vectorState = AesNeon.MixColumns(vectorState);
+            vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 9]);
+
+            vectorW = &vectorW[16 * 10];
+
+            switch (_keySchedule.Length)
+            {
+                case (14 + 1) * _Nb:
+                    vectorState = AesNeon.MixColumns(vectorState);
+                    vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)vectorW);
+                    vectorState = AesNeon.MixColumns(vectorState);
+                    vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16]);
+                    vectorW += 32;
+                    goto case (12 + 1) * _Nb;
+
+                case (12 + 1) * _Nb:
+                    vectorState = AesNeon.MixColumns(vectorState);
+                    vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)vectorW);
+                    vectorState = AesNeon.MixColumns(vectorState);
+                    vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16]);
+                    vectorW += 32;
+                    goto case (10 + 1) * _Nb;
+
+                case (10 + 1) * _Nb:
+                    var final = AdvSimd.Xor(vectorState, *(Vector128<byte>*)vectorW);
+                    *(Vector128<byte>*)outputPtr = final;
+                    break;
+            }
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    internal static unsafe void UnsafeEncryptHw(byte* inputPtr, byte* outputPtr, uint[] keySchedule)
+    internal static unsafe void EncryptX86(byte* inputPtr, byte* outputPtr, uint[] keySchedule)
     {
         fixed (uint* ksp = keySchedule)
         {
             switch (keySchedule.Length)
             {
-                case (10 + 1) * _Nb: hwEncrypt10(inputPtr, outputPtr, (byte*)ksp); return;
-                case (12 + 1) * _Nb: hwEncrypt12(inputPtr, outputPtr, (byte*)ksp); return;
-                case (14 + 1) * _Nb: hwEncrypt14(inputPtr, outputPtr, (byte*)ksp); return;
+                case (10 + 1) * _Nb: X86Encrypt10(inputPtr, outputPtr, (byte*)ksp); return;
+                case (12 + 1) * _Nb: x86Encrypt12(inputPtr, outputPtr, (byte*)ksp); return;
+                case (14 + 1) * _Nb: X86Encrypt14(inputPtr, outputPtr, (byte*)ksp); return;
             }
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.NoInlining)]
-    internal static unsafe void hwEncrypt10(byte* inputPtr, byte* outputPtr, byte* vectorW)
+    internal static unsafe void X86Encrypt10(byte* inputPtr, byte* outputPtr, byte* vectorW)
     {
         var vectorState = AesNi.Encrypt(
             Sse2.Xor(((Vector128<byte>*)inputPtr)[0], *(Vector128<byte>*)vectorW),
@@ -362,7 +459,7 @@ public sealed class Aes : IBlockCipher
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.NoInlining)]
-    internal static unsafe void hwEncrypt12(byte* inputPtr, byte* outputPtr, byte* vectorW)
+    internal static unsafe void x86Encrypt12(byte* inputPtr, byte* outputPtr, byte* vectorW)
     {
         var w = vectorW;
         var vectorState = ((Vector128<byte>*)inputPtr)[0];
@@ -383,7 +480,7 @@ public sealed class Aes : IBlockCipher
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.NoInlining)]
-    internal static unsafe void hwEncrypt14(byte* inputPtr, byte* outputPtr, byte* vectorW)
+    internal static unsafe void X86Encrypt14(byte* inputPtr, byte* outputPtr, byte* vectorW)
     {
         var w = vectorW;
         var vectorState = ((Vector128<byte>*)inputPtr)[0];
@@ -506,7 +603,7 @@ public sealed class Aes : IBlockCipher
         var len = _Nb * (nr + 1);
         var rconIndex = 1;
         var temp0 = stackalloc uint[4];
-        if (_useAesNi && nr == 10)
+        if (Mode == AccelerationMode.X86_AesNi && nr == 10)
         {
             for (var i = nk; i < len; i++)
             {

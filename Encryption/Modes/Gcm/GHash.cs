@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
 
@@ -21,10 +22,15 @@ internal unsafe class GHash
         recalcH();
     }
 
+    private static readonly bool isSse2Supported = Sse2.IsSupported;
+    private static readonly bool isArmAesSupported = System.Runtime.Intrinsics.Arm.Aes.IsSupported;
+
     public GcmFieldElement Invoke(in ReadOnlySpan<byte> data, in GcmFieldElement y)
     {
-        if (Sse2.IsSupported)
+        if (isSse2Supported)
             return ghashSse2(data, y);
+        //else if (isArmAesSupported)
+        //    return ghashArm(data, y);
         else
             return ghash(data, y);
     }
@@ -182,6 +188,77 @@ internal unsafe class GHash
         return y;
     }
 
+    private GcmFieldElement ghashArm(ReadOnlySpan<byte> data, GcmFieldElement y)
+    {
+        var xpos = 0u;
+        var segmentIndex = 0;
+        var zLow = 0ul;
+        var zHigh = 0ul;
+        var len = data.Length & ~15;
+        var vy = (Vector128<byte>*)&y;
+        var z = *vy;
+
+        fixed (GcmFieldElement* zPreComputed0 = ZPreComputed)
+        //fixed (GcmFieldElement* zPreComputed1 = ZPreComputed1)
+        fixed (byte* pdata = data)
+        {
+            var zprec0 = (byte*)zPreComputed0;
+            var zprec1 = (byte*)(zPreComputed0 + 256);
+
+            while (segmentIndex != data.Length)
+            {
+                if (segmentIndex < len)
+                {
+                    *vy = *(Vector128<byte>*)&pdata[segmentIndex];
+                    segmentIndex += 16;
+                }
+                else
+                {
+                    y.L[0] = 0;
+                    y.L[1] = 0;
+
+                    xpos = 0;
+                    while (segmentIndex < data.Length)
+                        y.B[xpos++] = pdata[segmentIndex++];
+                }
+
+                var temp = AdvSimd.Xor(z, *vy);
+                zLow = (*(GcmFieldElement*)&temp).L[0];
+                zHigh = (*(GcmFieldElement*)&temp).L[1];
+
+                xpos = 1 << 4 + 4;
+
+                var x0 = (uint)zLow & 0xf0u;
+                var x1 = ((uint)zLow & 0x0fu) << 4;
+                z = *(Vector128<byte>*)&zprec0[x0];
+                z = AdvSimd.Xor(*(Vector128<byte>*)&zprec1[x1], z);
+                zLow >>= 8;
+
+                for (; ; )
+                {
+                    do
+                    {
+                        x0 = (byte)zLow & 0xf0u | xpos;
+                        x1 = ((byte)zLow & 0x0fu) << 4 | xpos;
+                        z = AdvSimd.Xor(*(Vector128<byte>*)&zprec0[x0], z);
+                        z = AdvSimd.Xor(*(Vector128<byte>*)&zprec1[x1], z);
+                        zLow >>= 8;
+                        xpos += 1 << 4 + 4;
+                    }
+                    while ((xpos & (8 << 4 + 4) - 1) != 0);
+
+                    if (xpos == 16 << 4 + 4)
+                        break;
+
+                    zLow = zHigh;
+                }
+            }
+        }
+
+        *vy = z;
+        return y;
+    }
+
     private void recalcH()
     {
         fixed (GcmFieldElement* h = &_h)
@@ -195,15 +272,6 @@ internal unsafe class GHash
                 hspan[i] = hspan[15 - i];
                 hspan[15 - i] = t;
             }
-        }
-
-        {
-            var localShifted = _h;
-            var size = 16;
-            var test0 = computeTz(
-                64405,//size == 64 ? ulong.MaxValue : (1ul << size) - 1,
-                ref localShifted,
-                size);
         }
 
         fixed (GcmFieldElement* zPreComputed0 = ZPreComputed)

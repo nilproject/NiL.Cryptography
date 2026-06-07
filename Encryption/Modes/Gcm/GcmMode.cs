@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
@@ -52,7 +53,7 @@ public sealed class GcmMode : IAeadCipher
     private readonly IBlockCipher _blockCipher;
     private readonly GHash _gHash;
     private readonly GCtr _gCtr;
-    private AesGcmHw _aesGcmHw;
+    private IAesGcmHwBase _aesGcmHw;
 
     public int InputBlockSize => _blockCipher.InputBlockSize;
     public int OutBlockSize => _blockCipher.OutBlockSize;
@@ -70,9 +71,12 @@ public sealed class GcmMode : IAeadCipher
         _gHash = new GHash(blockCipher);
         _gCtr = new GCtr(blockCipher);
 
-        if (Sse2.IsSupported && blockCipher is Aes aes)
+        if (blockCipher is Aes aes)
         {
-            _aesGcmHw = new AesGcmHw(_gHash, _gCtr, aes);
+            if (Sse2.IsSupported && System.Runtime.Intrinsics.X86.Aes.IsSupported)
+                _aesGcmHw = new AesGcmHwX86(_gHash, _gCtr, aes);
+            else if (System.Runtime.Intrinsics.Arm.Aes.IsSupported)
+                _aesGcmHw = new AesGcmHwArm(_gHash, _gCtr, aes);
         }
     }
 
