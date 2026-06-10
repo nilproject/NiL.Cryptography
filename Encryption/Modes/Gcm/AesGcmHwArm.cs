@@ -74,207 +74,116 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
 
         var vv = _gHash.H;
         var vv2 = vv;
-        Vector128<long> e1ul2 = default;
-        Vector128<long> mask = default;
+        Vector64<ulong> e1ul2 = default;
         ((ulong*)&e1ul2)[0] = 0xe1ul << 2;
 
-        //var ghash = AdvSimd.ReverseElement32(*(Vector128<long>*)&gHash);
-        var ghash = *(Vector128<byte>*)&gHash;
+        var ghash = AdvSimd.ReverseElement8(*(Vector128<ulong>*)&gHash);
 
-        Vector128<byte> key = default;
-
-        fixed (GcmFieldElement* zPreComputed0 = _gHash.ZPreComputed)
         fixed (byte* pOutput = output)
         fixed (byte* pInput = input)
-        fixed (uint* keySchedule = _aes._keySchedule)
         {
-            //{
-            //    var mul = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<long>*)&vv2, *(Vector64<long>*)&e1ul2);
-            //    vv2.L[0] = vv2.L[1] ^ (ulong)mul[0] << 55;
-            //    vv2.L[1] = (ulong)mul[1] << 55 | (ulong)mul[0] >> 9;
-            //}
-
-            var keySize = (_aes._keySchedule.Length - 44) / 8;
+            {
+                var mul = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&vv2, e1ul2);
+                vv2.L[0] = vv2.L[1] ^ mul[0] << 55;
+                vv2.L[1] = mul[1] << 55 | mul[0] >> 9;
+            }
 
             _aes.EncryptArm(counterBytes, (byte*)&encodedCounterBytes);
 
-            if (++counterBytes[15] == 0
-                && ++counterBytes[14] == 0
-                && ++counterBytes[13] == 0)
-                counterBytes[12]++;
+            _ = ++counterBytes[15] == 0 &&
+                ++counterBytes[14] == 0 &&
+                ++counterBytes[13] == 0 &&
+                ++counterBytes[12] == 0;
 
-            //if (false)
+            var len = (input.Length & ~15);
+            var tail = input.Length & 15;
+
+            Vector128<byte> inputVector = default;
+            Vector128<byte> outputVector = default;
+
+            for (var i = 0; ; i += 16)
             {
-                var len = input.Length & ~15;
-                for (var dataIndex = 0; dataIndex < len;)
+                if (i >= len)
                 {
-                    uint cnt = (uint)(counterBytes[15] | counterBytes[14] << 8 | counterBytes[13] << 16 | counterBytes[12] << 24);
-                    var cntHigh = *(ushort*)&counterBytes[12];
+                    if (tail == 0 || i > len)
+                        break;
 
-                    while (dataIndex < len)
+                    inputVector = *(Vector128<byte>*)&pInput[i];
+                    outputVector = AdvSimd.Xor(inputVector, encodedCounterBytes);
+                    var temp = *(GcmFieldElement*)&outputVector;
+                    while (tail-- > 0)
                     {
-                        *(ulong*)&pOutput[dataIndex] = ((ulong*)counterBytes)[0];
-                        *(ulong*)&pOutput[dataIndex + 8] = ((uint*)counterBytes)[2] | (ulong)((cnt << 24 | (cnt & 0xff00) << 8) ^ cntHigh) << 32;
-                        cnt++;
-                        dataIndex += 16;
-
-                        if ((cnt & 0xffff) == 0)
-                            break;
+                        pOutput[i] = temp.B[i & 15];
+                        i++;
                     }
 
-                    if ((cnt & 0xffff) == 0)
+                    while ((i & 15) != 0)
                     {
-                        counterBytes[15] = 0;
-                        counterBytes[14] = 0;
-                        if (++counterBytes[13] == 0)
-                            counterBytes[12]++;
+                        temp.B[i & 15] = 0;
+                        i++;
                     }
-                }
 
-                var ks = keySchedule + keySize * 4 * 2;
-                for (var k = -keySize * 2; k < 9; k += 2)
-                {
-                    var ks0 = *(Vector128<byte>*)&ks[4 * k];
-                    var ks1 = *(Vector128<byte>*)&ks[4 * (k + 1)];
-                    for (var i = 0; i < len; i += 16)
-                    {
-                        var temp = AesNeon.Encrypt(*(Vector128<byte>*)&pOutput[i], ks0);
-                        temp = AesNeon.MixColumns(temp);
-                        temp = AesNeon.Encrypt(temp, ks1);
-                        if (k != 8) temp = AesNeon.MixColumns(temp);
-
-                        *(Vector128<byte>*)&pOutput[i] = temp;
-                    }
-                }
-
-                key = *(Vector128<byte>*)&ks[4 * 10];
-            }
-
-            for (int i = 0, len = input.Length; i < len; i += 16)
-            {
-                Vector128<byte> inputVector = default;
-                Vector128<byte> outputVector = default;
-                if (len - i < 16)
-                {
-                    var temp = *(Vector128<byte>*)&pInput[i];
-
-                    var delta = 16 - (len - i);
-                    while (delta-- > 0)
-                        ((byte*)&temp)[15 - delta] = 0;
-
-                    inputVector = temp;
-
-                    outputVector = AdvSimd.Xor(encodedCounterBytes, inputVector);
-
-                    temp = outputVector;
-
-                    delta = 16 - (input.Length - i);
-                    while (delta-- > 0)
-                        ((byte*)&temp)[15 - delta] = 0;
-
-                    outputVector = temp;
-
-                    delta = input.Length - i;
-                    while (delta-- > 0)
-                        pOutput[i + delta] = ((byte*)&temp)[delta];
+                    outputVector = *(Vector128<byte>*)&temp;
                 }
                 else
                 {
                     inputVector = *(Vector128<byte>*)&pInput[i];
                     outputVector = AdvSimd.Xor(inputVector, encodedCounterBytes);
-
-                    ref var data = ref *(Vector128<byte>*)&pOutput[i];
-                    encodedCounterBytes = AdvSimd.Xor(data, key);
-
-                    data = outputVector;
+                    *(Vector128<byte>*)&pOutput[i] = outputVector;
                 }
+
+                _aes.EncryptArm(counterBytes, (byte*)&encodedCounterBytes);
 
                 if (encrypt)
                     inputVector = outputVector;
 
-                //if (_isCarryLessMulSupported)
-                //{
-                //    outputVector = *(Vector128<byte>*)&vv2;
-
-                //    var shuffled = Sse2.Xor(ghash, Ssse3.Shuffle(inputVector, *(Vector128<byte>*)&mask));
-
-                //    inputVector = *(Vector128<byte>*)&vv;
-
-                //    var product0 = Sse2.Xor(
-                //        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x10),
-                //        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x00));
-
-                //    var product1 = Sse2.Xor(
-                //        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x11),
-                //        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x01));
-
-                //    var data = default(GcmFieldElement);
-                //    Sse2.Store((byte*)&data, *(Vector128<byte>*)&product0);
-                //    var low = data.L[0];
-                //    var high = data.L[1];
-
-                //    product0 = Sse2.ShiftRightLogical(Sse2.ShiftLeftLogical(product0, 1), 1);
-                //    product0 = Sse2.ShiftLeftLogical128BitLane(Pclmulqdq.CarrylessMultiply(product0, e1ul2, 0), 7);
-
-                //    Sse2.Store((byte*)&data, *(Vector128<byte>*)&product1);
-                //    high ^= data.L[0];
-                //    var high1 = data.L[1];
-
-                //    *(Vector128<ulong>*)&ghash = Sse2.Xor(
-                //        product0,
-                //        Vector128.Create((high + high) ^ low >> 63, (high1 + high1) ^ high >> 63));
-                //}
-                //else
                 {
-                    var temp = AdvSimd.Xor(ghash, inputVector);
-                    var zprec0 = (Vector128<byte>*)zPreComputed0;
-                    var zprec1 = (Vector128<byte>*)(zPreComputed0 + 256);
-                    ulong x0, x1;
-                    Vector128<byte> t;
-                    x0 = (*(GcmFieldElement*)&temp).L[0];
-                    x1 = x0 & 0x0f0f0f0f0f0f0f0ful;
-                    x0 &= 0xf0f0_f0f0_f0f0_f0f0ul;
-                    x0 >>= 4;
+                    var shuffled = AdvSimd.Xor(ghash, AdvSimd.ReverseElement8(*(Vector128<ulong>*)&inputVector));
+                    var temp2 = AdvSimd.LoadVector128((ulong*)&vv2);
+                    var temp4 = AesNeon.PolynomialMultiplyWideningUpper(temp2, shuffled);
+                    temp2 = AesNeon.PolynomialMultiplyWideningUpper(AdvSimd.ExtractVector128(temp2, temp2, 1), shuffled);
 
-                    x0 |= 0x7060_5040_3020_1000;
-                    x1 |= 0x7060_5040_3020_1000;
+                    shuffled = AdvSimd.ExtractVector128(shuffled, shuffled, 1);
 
-                    t = AdvSimd.Xor(zprec0[(byte)x0], zprec1[(byte)x1]);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 8], zprec1[0xff & x1 >> 8]), t);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 16], zprec1[0xff & x1 >> 16]), t);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 24], zprec1[0xff & x1 >> 24]), t);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 32], zprec1[0xff & x1 >> 32]), t);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 40], zprec1[0xff & x1 >> 40]), t);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 48], zprec1[0xff & x1 >> 48]), t);
-                    t = AdvSimd.Xor(AdvSimd.Xor(zprec0[0xff & x0 >> 56], zprec1[0xff & x1 >> 56]), t);
+                    var temp = AdvSimd.LoadVector128((ulong*)&vv);
+                    var temp3 = AesNeon.PolynomialMultiplyWideningUpper(temp, shuffled);
+                    temp = AesNeon.PolynomialMultiplyWideningUpper(AdvSimd.ExtractVector128(temp, temp, 1), shuffled);
 
-                    x0 = (*(GcmFieldElement*)&temp).L[1];
-                    x1 = x0 & 0x0f0f0f0f0f0f0f0ful;
-                    x0 &= 0xf0f0f0f0f0f0f0f0ul;
-                    x0 >>= 4;
-                    x0 |= 0xf0e0_d0c0_b0a0_9080;
-                    x1 |= 0xf0e0_d0c0_b0a0_9080;
+                    var product0 = AdvSimd.Xor(temp, temp2);
+                    var product1 = AdvSimd.Xor(temp3, temp4);
 
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[(byte)x0], zprec1[(byte)x1]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 8], zprec1[0xff & x1 >> 8]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 16], zprec1[0xff & x1 >> 16]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 24], zprec1[0xff & x1 >> 24]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 32], zprec1[0xff & x1 >> 32]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 40], zprec1[0xff & x1 >> 40]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 48], zprec1[0xff & x1 >> 48]));
-                    t = AdvSimd.Xor(t, AdvSimd.Xor(zprec0[0xff & x0 >> 56], zprec1[0xff & x1 >> 56]));
-                    ghash = t;
+                    var data = default(GcmFieldElement);
+                    AdvSimd.Store((ulong*)&data, product0);
+                    var low0 = data.L[0];
+
+                    if (low0 > long.MaxValue)
+                        product0 = AdvSimd.ShiftRightLogical(AdvSimd.ShiftLeftLogical(product0, 1), 1);
+
+                    product0 = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&product0, e1ul2);
+
+                    var high0 = data.L[1];
+
+                    AdvSimd.Store((ulong*)&data, product0);
+                    var high1 = (data.L[1] << 56) | (data.L[0] >> 8);
+                    var low1 = data.L[0] << 56;
+
+                    AdvSimd.Store((ulong*)&data, product1);
+                    high0 ^= data.L[0];
+                    var high2 = data.L[1];
+
+                    ghash = Vector128.Create(
+                            high1 ^ (high2 + high2) ^ (high0 >> 63),
+                            low1 ^ (high0 + high0) ^ (low0 >> 63));
                 }
+
+                _ = ++counterBytes[15] == 0 &&
+                    ++counterBytes[14] == 0 &&
+                    ++counterBytes[13] == 0 &&
+                    ++counterBytes[12] == 0;
             }
 
-            //_counters.Sort((x, y) => Math.Sign(x.count - y.count));
-
-            //var ttest = _counters.Select(x => (x.mask.ToString("x2"), x.count / (float)_commonCounter)).ToList();
-
-            //if (_isCarryLessMulSupported)
-            //    return Ssse3.Shuffle(ghash, *(Vector128<byte>*)&mask);
-
-            return ghash;
+            ghash = AdvSimd.ReverseElement8(ghash);
+            return *(Vector128<byte>*)&ghash;
         }
     }
 }
