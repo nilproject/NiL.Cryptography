@@ -119,14 +119,14 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
             switch (keySize)
             {
                 case 0: Aes.X86Encrypt10(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
-                case 1: Aes.x86Encrypt12(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
+                case 1: Aes.X86Encrypt12(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
                 case 2: Aes.X86Encrypt14(counterBytes, (byte*)&encodedCounterBytes, (byte*)keySchedule); break;
             }
 
-            if (++counterBytes[15] == 0
-                && ++counterBytes[14] == 0
-                && ++counterBytes[13] == 0)
-                counterBytes[12]++;
+            _ = ++counterBytes[15] == 0 &&
+                ++counterBytes[14] == 0 &&
+                ++counterBytes[13] == 0 &&
+                ++counterBytes[12] == 0;
 
             //if (false)
             {
@@ -151,58 +151,112 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
 
                     if ((cnt & 0xffff) == 0)
                     {
-                        counterBytes[15] = 0;
-                        counterBytes[14] = 0;
-                        if (++counterBytes[13] == 0)
-                            counterBytes[12]++;
+                        _ = ++counterBytes[15] == 0 &&
+                            ++counterBytes[14] == 0 &&
+                            ++counterBytes[13] == 0 &&
+                            ++counterBytes[12] == 0;
                     }
                 }
 
                 ((ulong*)counterBytes)[0] ^= *(ulong*)&keySchedule[0];
                 ((uint*)counterBytes)[2] ^= keySchedule[2];
 
-                for (var k = 1; k <= 7; k += 3)
-                {
-                    var ks0 = *(Vector128<byte>*)&keySchedule[4 * k];
-                    var ks1 = *(Vector128<byte>*)&keySchedule[4 * (k + 1)];
-                    var ks2 = *(Vector128<byte>*)&keySchedule[4 * (k + 2)];
-                    for (var i = 0; i < len; i += 16)
-                    {
-                        *(Vector128<byte>*)&pOutput[i] = AesNi.Encrypt(AesNi.Encrypt(AesNi.Encrypt(*(Vector128<byte>*)&pOutput[i], ks0), ks1), ks2);
-                    }
-                }
-
                 if (keySize == 1)
                 {
-                    var ks0 = *(Vector128<byte>*)&keySchedule[4 * 10];
-                    var ks1 = *(Vector128<byte>*)&keySchedule[4 * 11];
+                    var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
+                    var ks2 = *(Vector128<byte>*)&keySchedule[4 * 2];
+                    var ks3 = *(Vector128<byte>*)&keySchedule[4 * 3];
+                    var ks4 = *(Vector128<byte>*)&keySchedule[4 * 4];
+                    var ks5 = *(Vector128<byte>*)&keySchedule[4 * 5];
+                    var ks6 = *(Vector128<byte>*)&keySchedule[4 * 6];
+                    var ks7 = *(Vector128<byte>*)&keySchedule[4 * 7];
+                    var ks8 = *(Vector128<byte>*)&keySchedule[4 * 8];
+                    var ks9 = *(Vector128<byte>*)&keySchedule[4 * 9];
+                    var ks10 = *(Vector128<byte>*)&keySchedule[4 * 10];
+                    var ks11 = *(Vector128<byte>*)&keySchedule[4 * 11];
                     for (var i = 0; i < len; i += 16)
                     {
-                        var data = (Vector128<byte>*)&pOutput[i];
-                        *data = AesNi.Encrypt(AesNi.Encrypt(*data, ks0), ks1);
+                        var temp = AesNi.Encrypt(*(Vector128<byte>*)&pOutput[i], ks1);
+                        Sse.Prefetch2(&pOutput[i + 1]);
+                        temp = AesNi.Encrypt(temp, ks2);
+                        temp = AesNi.Encrypt(temp, ks3);
+                        temp = AesNi.Encrypt(temp, ks4);
+                        temp = AesNi.Encrypt(temp, ks5);
+                        temp = AesNi.Encrypt(temp, ks6);
+                        temp = AesNi.Encrypt(temp, ks7);
+                        temp = AesNi.Encrypt(temp, ks8);
+                        temp = AesNi.Encrypt(temp, ks9);
+                        temp = AesNi.Encrypt(temp, ks10);
+                        Sse2.Store(&pOutput[i], temp);
                     }
 
                     key = *(Vector128<byte>*)&keySchedule[4 * 12];
                 }
                 else if (keySize == 2)
                 {
-                    var ks0 = *(Vector128<byte>*)&keySchedule[4 * 10];
-                    var ks1 = *(Vector128<byte>*)&keySchedule[4 * 11];
-                    var ks2 = *(Vector128<byte>*)&keySchedule[4 * 12];
-                    var ks3 = *(Vector128<byte>*)&keySchedule[4 * 13];
+                    var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
+                    var ks2 = *(Vector128<byte>*)&keySchedule[4 * 2];
+                    var ks3 = *(Vector128<byte>*)&keySchedule[4 * 3];
+                    var ks4 = *(Vector128<byte>*)&keySchedule[4 * 4];
+                    var ks5 = *(Vector128<byte>*)&keySchedule[4 * 5];
+                    var ks6 = *(Vector128<byte>*)&keySchedule[4 * 6];
+                    var ks7 = *(Vector128<byte>*)&keySchedule[4 * 7];
+                    var ks8 = *(Vector128<byte>*)&keySchedule[4 * 8];
+                    var ks9 = *(Vector128<byte>*)&keySchedule[4 * 9];
+                    var ks10 = *(Vector128<byte>*)&keySchedule[4 * 10];
+                    var ks11 = *(Vector128<byte>*)&keySchedule[4 * 11];
+                    var ks12 = *(Vector128<byte>*)&keySchedule[4 * 12];
+                    var ks13 = *(Vector128<byte>*)&keySchedule[4 * 13];
                     for (var i = 0; i < len; i += 16)
                     {
-                        var data = (Vector128<byte>*)&pOutput[i];
-                        *data = AesNi.Encrypt(AesNi.Encrypt(AesNi.Encrypt(AesNi.Encrypt(*data, ks0), ks1), ks2), ks3);
+                        var temp = AesNi.Encrypt(*(Vector128<byte>*)&pOutput[i], ks1);
+                        Sse.Prefetch2(&pOutput[i + 1]);
+                        temp = AesNi.Encrypt(temp, ks2);
+                        temp = AesNi.Encrypt(temp, ks3);
+                        temp = AesNi.Encrypt(temp, ks4);
+                        temp = AesNi.Encrypt(temp, ks5);
+                        temp = AesNi.Encrypt(temp, ks6);
+                        temp = AesNi.Encrypt(temp, ks7);
+                        temp = AesNi.Encrypt(temp, ks8);
+                        temp = AesNi.Encrypt(temp, ks9);
+                        temp = AesNi.Encrypt(temp, ks10);
+                        temp = AesNi.Encrypt(temp, ks11);
+                        temp = AesNi.Encrypt(temp, ks12);
+                        temp = AesNi.Encrypt(temp, ks13);
+                        Sse2.Store(&pOutput[i], temp);
                     }
 
                     key = *(Vector128<byte>*)&keySchedule[4 * 14];
                 }
                 else
-                    key = *(Vector128<byte>*)&keySchedule[4 * 10];
-            }
+                {
+                    var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
+                    var ks2 = *(Vector128<byte>*)&keySchedule[4 * 2];
+                    var ks3 = *(Vector128<byte>*)&keySchedule[4 * 3];
+                    var ks4 = *(Vector128<byte>*)&keySchedule[4 * 4];
+                    var ks5 = *(Vector128<byte>*)&keySchedule[4 * 5];
+                    var ks6 = *(Vector128<byte>*)&keySchedule[4 * 6];
+                    var ks7 = *(Vector128<byte>*)&keySchedule[4 * 7];
+                    var ks8 = *(Vector128<byte>*)&keySchedule[4 * 8];
+                    var ks9 = *(Vector128<byte>*)&keySchedule[4 * 9];
+                    for (var i = 0; i < len; i += 16)
+                    {
+                        var temp = AesNi.Encrypt(*(Vector128<byte>*)&pOutput[i], ks1);
+                        Sse.Prefetch2(&pOutput[i + 1]);
+                        temp = AesNi.Encrypt(temp, ks2);
+                        temp = AesNi.Encrypt(temp, ks3);
+                        temp = AesNi.Encrypt(temp, ks4);
+                        temp = AesNi.Encrypt(temp, ks5);
+                        temp = AesNi.Encrypt(temp, ks6);
+                        temp = AesNi.Encrypt(temp, ks7);
+                        temp = AesNi.Encrypt(temp, ks8);
+                        temp = AesNi.Encrypt(temp, ks9);
+                        Sse2.Store(&pOutput[i], temp);
+                    }
 
-            var sw = Stopwatch.StartNew();
+                    key = *(Vector128<byte>*)&keySchedule[4 * 10];
+                }
+            }
 
             for (int i = 0, len = input.Length; i < len; i += 16)
             {
@@ -237,24 +291,9 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
                     inputVector = *(Vector128<byte>*)&pInput[i];
                     outputVector = Sse2.Xor(inputVector, encodedCounterBytes);
 
-                    //var prevEncoded = encodedCounterBytes;
                     ref var data = ref *(Vector128<byte>*)&pOutput[i];
                     encodedCounterBytes = AesNi.EncryptLast(data, key);
-
-                    //var test = Sse2.Xor(encodedCounterBytes, prevEncoded);
-
-                    //var c0 = Popcnt.X64.PopCount(((ulong*)&test)[0]);
-                    //var c1 = Popcnt.X64.PopCount(((ulong*)&test)[1]);
-
-                    //var m = 0b_0000_0000_0000_1000_0000_0000_0000_0000_0000_1000_0000_0000_0000_0000_0000_0000ul;
-                    //_counter0v += (((ulong*)&test)[0] & m) == m ? 1ul : 0;
-                    //_counter1v += (((ulong*)&test)[1] & m) == m ? 1ul : 0;
-                    //_counter0c++;
-
-                    //for (var c = 0; c < _counters.Count; c++)
-                    //    _counters[c] = (_counters[c].mask, _counters[c].count + ((_counters[c].mask & ((ulong*)&test)[0]) == _counters[c].mask ? 1L : 0));
-
-                    //_commonCounter++;
+                    //encodedCounterBytes = data;
 
                     data = outputVector;
                 }
@@ -270,21 +309,23 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
 
                     inputVector = *(Vector128<byte>*)&vv;
 
-                    var product0 = Sse2.Xor(
-                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x10),
-                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x00));
+                    var temp = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x10);
+                    var temp2 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x00);
+                    var temp3 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x11);
+                    var temp4 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x01);
 
-                    var product1 = Sse2.Xor(
-                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&inputVector, *(Vector128<ulong>*)&shuffled, 0x11),
-                        Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&outputVector, *(Vector128<ulong>*)&shuffled, 0x01));
+                    var product0 = Sse2.Xor(temp, temp2);
+                    var product1 = Sse2.Xor(temp3, temp4);
 
                     var data = default(GcmFieldElement);
                     Sse2.Store((byte*)&data, *(Vector128<byte>*)&product0);
                     var low = data.L[0];
                     var high = data.L[1];
 
-                    product0 = Sse2.ShiftRightLogical(Sse2.ShiftLeftLogical(product0, 1), 1);
-                    product0 = Sse2.ShiftLeftLogical128BitLane(Pclmulqdq.CarrylessMultiply(product0, e1ul2, 0), 7);
+                    product0 = Sse2.ShiftLeftLogical(product0, 1);
+                    product0 = Sse2.ShiftRightLogical(product0, 1);
+                    temp = Pclmulqdq.CarrylessMultiply(product0, e1ul2, 0);
+                    product0 = Sse2.ShiftLeftLogical128BitLane(temp, 7);
 
                     Sse2.Store((byte*)&data, *(Vector128<byte>*)&product1);
                     high ^= data.L[0];

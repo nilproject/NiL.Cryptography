@@ -3,6 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics.X86;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.Arm;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
 
@@ -274,6 +276,15 @@ internal unsafe class GHash
             }
         }
 
+        //{
+        //    var localShifted = _h;
+        //    var size = 32;
+        //    var test0 = computeTz(
+        //        size == 64 ? ulong.MaxValue : (1ul << size) - 1,
+        //        ref localShifted,
+        //        size);
+        //}
+
         fixed (GcmFieldElement* zPreComputed0 = ZPreComputed)
         //fixed (GcmFieldElement* zPreComputed1 = ZPreComputed1)
         {
@@ -300,18 +311,19 @@ internal unsafe class GHash
     }
     private GcmFieldElement computeTz(ulong bbyte, ref GcmFieldElement v, int size = 4)
     {
-        //var originalBbyte = bbyte;
-        //var b = default(GcmFieldElement);
-        //b.L[0] = bbyte;
-        //var vv = v;
-        //var product0 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vv, *(Vector128<ulong>*)&b, 0);
-        //var gcmProduct = *(GcmFieldElement*)&product0;
-        //var product1 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vv, *(Vector128<ulong>*)&b, 1);
-        //gcmProduct.L[1] ^= ((ulong*)&product1)[0];// >> (size - 1);
-        //gcmProduct.L[0] = (gcmProduct.L[0] >> (size - 1)) | (gcmProduct.L[1] << (64 - size + 1));
-        //gcmProduct.L[1] >>= size - 1;
-        //gcmProduct.L[1] ^= (((ulong*)&product1)[1] << (64 - size + 1));
-
+#if false
+        var originalBbyte = bbyte;
+        var b = default(GcmFieldElement);
+        b.L[0] = bbyte;
+        var vv = v;
+        var product0 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vv, *(Vector128<ulong>*)&b, 0);
+        var gcmProduct = *(GcmFieldElement*)&product0;
+        var product1 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vv, *(Vector128<ulong>*)&b, 1);
+        gcmProduct.L[1] ^= ((ulong*)&product1)[0];// >> (size - 1);
+        gcmProduct.L[0] = (gcmProduct.L[0] >> (size - 1)) | (gcmProduct.L[1] << (64 - size + 1));
+        gcmProduct.L[1] >>= size - 1;
+        gcmProduct.L[1] ^= (((ulong*)&product1)[1] << (64 - size + 1));
+#endif
         var tz = new GcmFieldElement();
 
         //var rxors = new List<int>();
@@ -347,8 +359,6 @@ internal unsafe class GHash
             }
         }
 
-
-
         // reference
 #if false
         var xor = Sse2.Xor(*(Vector128<ulong>*)&gcmProduct, *(Vector128<ulong>*)&tz);
@@ -381,7 +391,7 @@ internal unsafe class GHash
         }
         else
         {
-            ((ulong*)&product0)[1] = (((ulong*)&product0)[0] << 56 - size + 2);
+            ((ulong*)&product0)[1] = ((ulong*)&product0)[0] << (58 - size);
             ((ulong*)&product0)[0] = 0;
         }
         product1 = Sse2.Xor(product0, *(Vector128<ulong>*)&gcmProduct);
@@ -393,6 +403,7 @@ internal unsafe class GHash
         if (xor[0] != 0 || xor[1] != 0) 
             Debugger.Break();
 #endif
+
         for (var k = 0; k < 8; k++)
         {
             var t = tz.B[k];
