@@ -85,14 +85,14 @@ public class TlsAes128GcmSha256 : EcdheEcdsaAes128GcmSha256
             for (var i = 0; i < _keysSet.TheirWriteIV.Length; i++)
                 nonce[i] ^= _keysSet.TheirWriteIV[i];
 
-            var outputAuthTag = stackalloc byte[_authTagLen];
+            Span<byte> outputAuthTag = stackalloc byte[_authTagLen];
 
             _inputCipher.Decrypt(
                 outputBuffer.Buffer[..5],
                 new ReadOnlySpan<byte>(nonce, _nonceLen),
                 input[..realDataLen],
                 outputBuffer[..realDataLen],
-                new Span<byte>(outputAuthTag, _authTagLen));
+                outputAuthTag);
 
             for (var i = 0; i < _authTagLen; i++)
                 if (input[input.Length + i - _authTagLen] != outputAuthTag[i])

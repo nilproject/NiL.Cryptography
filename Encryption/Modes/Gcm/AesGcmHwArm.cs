@@ -1,7 +1,9 @@
 ﻿using System;
-using System.Runtime.Intrinsics.Arm;
-using System.Runtime.Intrinsics;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 using AesNeon = System.Runtime.Intrinsics.Arm.Aes;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
@@ -71,6 +73,7 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
     private Vector128<byte> encode(bool encrypt, byte* counterBytes, in ReadOnlySpan<byte> input, Span<byte> output, GcmFieldElement gHash)
     {
         Vector128<byte> encodedCounterBytes = default;
+        var test = new List<Vector128<ulong>>();
 
         var vv = _gHash.H;
         var vv2 = vv;
@@ -78,6 +81,7 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
         ((ulong*)&e1ul2)[0] = 0xe1ul << 2;
 
         var ghash = AdvSimd.ReverseElement8(*(Vector128<ulong>*)&gHash);
+        ghash = AdvSimd.ExtractVector128(ghash, ghash, 1);
 
         fixed (byte* pOutput = output)
         fixed (byte* pInput = input)
@@ -101,6 +105,8 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
             Vector128<byte> inputVector = default;
             Vector128<byte> outputVector = default;
 
+            //test.Add(AdvSimd.ReverseElement8(ghash));
+
             for (var i = 0; ; i += 16)
             {
                 if (i >= len)
@@ -117,28 +123,86 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
                         i++;
                     }
 
-                    while ((i & 15) != 0)
+                    if (encrypt)
                     {
-                        temp.B[i & 15] = 0;
-                        i++;
-                    }
+                        while ((i & 15) != 0)
+                        {
+                            temp.B[i & 15] = 0;
+                            i++;
+                        }
 
-                    outputVector = *(Vector128<byte>*)&temp;
+                        inputVector = *(Vector128<byte>*)&temp;
+                    }
+                    else
+                    {
+                        *(Vector128<byte>*)&temp = inputVector;
+
+                        while ((i & 15) != 0)
+                        {
+                            temp.B[i & 15] = 0;
+                            i++;
+                        }
+
+                        inputVector = *(Vector128<byte>*)&temp;
+                    }
                 }
                 else
                 {
                     inputVector = *(Vector128<byte>*)&pInput[i];
                     outputVector = AdvSimd.Xor(inputVector, encodedCounterBytes);
                     *(Vector128<byte>*)&pOutput[i] = outputVector;
+
+                    if (encrypt)
+                        inputVector = outputVector;
                 }
 
                 _aes.EncryptArm(counterBytes, (byte*)&encodedCounterBytes);
 
-                if (encrypt)
-                    inputVector = outputVector;
-
                 {
-                    var shuffled = AdvSimd.Xor(ghash, AdvSimd.ReverseElement8(*(Vector128<ulong>*)&inputVector));
+                    var vValue0 = *(Vector128<ulong>*)&vv;
+                    var vValue1 = *(Vector128<ulong>*)&vv2;
+
+                    var shuffled = AdvSimd.ReverseElement8(*(Vector128<ulong>*)&inputVector);
+                    shuffled = AdvSimd.ExtractVector128(shuffled, shuffled, 1);
+                    shuffled = AdvSimd.Xor(ghash, shuffled);
+
+                    var temp2 = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&vValue1, *(Vector64<ulong>*)&shuffled);
+                    var temp3 = AesNeon.PolynomialMultiplyWideningUpper(vValue0, shuffled);
+
+                    shuffled = AdvSimd.ExtractVector128(shuffled, shuffled, 1);
+
+                    var temp1 = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&vValue0, *(Vector64<ulong>*)&shuffled);
+                    var temp4 = AesNeon.PolynomialMultiplyWideningUpper(vValue1, shuffled);
+
+                    var product0 = AdvSimd.Xor(temp1, temp2);
+                    var product1 = AdvSimd.Xor(temp3, temp4);
+
+                    var data = default(GcmFieldElement);
+                    AdvSimd.Store((byte*)&data, *(Vector128<byte>*)&product0);
+                    var low = data.L[0];
+                    var high = data.L[1];
+
+                    product0 = AdvSimd.ShiftLeftLogical(product0, 1);
+                    product0 = AdvSimd.ShiftRightLogical(product0, 1);
+                    product0 = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&product0, e1ul2);
+
+                    AdvSimd.Store((byte*)&data, *(Vector128<byte>*)&product0);
+                    data.L[1] = (data.L[1] << 56) | (data.L[0] >> 8);
+                    data.L[0] <<= 56;
+                    product0 = AdvSimd.LoadVector128((ulong*)&data);
+
+                    AdvSimd.Store((byte*)&data, *(Vector128<byte>*)&product1);
+                    high ^= data.L[0];
+                    var high1 = data.L[1];
+
+                    ghash = AdvSimd.Xor(
+                        product0,
+                        Vector128.Create(
+                            (high + high) ^ low >> 63,
+                            (high1 + high1) ^ high >> 63));
+
+
+                    /*var shuffled = AdvSimd.Xor(ghash, AdvSimd.ReverseElement8(*(Vector128<ulong>*)&inputVector));
                     var temp2 = AdvSimd.LoadVector128((ulong*)&vv2);
                     var temp4 = AesNeon.PolynomialMultiplyWideningUpper(temp2, shuffled);
                     temp2 = AesNeon.PolynomialMultiplyWideningUpper(AdvSimd.ExtractVector128(temp2, temp2, 1), shuffled);
@@ -155,13 +219,11 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
                     var data = default(GcmFieldElement);
                     AdvSimd.Store((ulong*)&data, product0);
                     var low0 = data.L[0];
-
-                    if (low0 > long.MaxValue)
-                        product0 = AdvSimd.ShiftRightLogical(AdvSimd.ShiftLeftLogical(product0, 1), 1);
-
-                    product0 = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&product0, e1ul2);
-
                     var high0 = data.L[1];
+
+                    //if (low0 > long.MaxValue)
+                    product0 = AdvSimd.ShiftRightLogical(AdvSimd.ShiftLeftLogical(product0, 1), 1);
+                    product0 = AesNeon.PolynomialMultiplyWideningLower(*(Vector64<ulong>*)&product0, e1ul2);
 
                     AdvSimd.Store((ulong*)&data, product0);
                     var high1 = (data.L[1] << 56) | (data.L[0] >> 8);
@@ -173,16 +235,20 @@ internal unsafe class AesGcmHwArm : IAesGcmHwBase
 
                     ghash = Vector128.Create(
                             high1 ^ (high2 + high2) ^ (high0 >> 63),
-                            low1 ^ (high0 + high0) ^ (low0 >> 63));
+                            low1 ^ (high0 + high0) ^ (low0 >> 63));*/
                 }
 
                 _ = ++counterBytes[15] == 0 &&
                     ++counterBytes[14] == 0 &&
                     ++counterBytes[13] == 0 &&
                     ++counterBytes[12] == 0;
+                
+                //test.Add(AdvSimd.ReverseElement8(ghash));
             }
 
             ghash = AdvSimd.ReverseElement8(ghash);
+            ghash = AdvSimd.ExtractVector128(ghash, ghash, 1);
+
             return *(Vector128<byte>*)&ghash;
         }
     }
