@@ -174,7 +174,7 @@ public sealed class Aes : IBlockCipher
 
     private const int _Nb = 4;
 
-    private static readonly bool _Sse2Supported = Sse2.IsSupported;
+    private static readonly bool _Sse3Supported = Sse3.IsSupported;
 
     public int InputBlockSize => 16;
 
@@ -375,7 +375,7 @@ public sealed class Aes : IBlockCipher
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
     internal unsafe void EncryptArm(byte* inputPtr, byte* outputPtr)
     {
         var keyLen = _keySchedule.Length;
@@ -392,27 +392,28 @@ public sealed class Aes : IBlockCipher
             vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 7]));
             vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 8]));
             vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 9]);
-            vectorW = &vectorW[16 * 10];
 
             switch (keyLen)
             {
                 case (14 + 1) * _Nb:
 
-                    vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)vectorW));
-                    vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16]));
+                    vectorState = AesNeon.MixColumns(vectorState);
+                    vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 10]));
+                    vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 11]);
                     vectorW += 32;
                     goto case (12 + 1) * _Nb;
 
                 case (12 + 1) * _Nb:
 
-                    vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)vectorW));
-                    vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16]));
+                    vectorState = AesNeon.MixColumns(vectorState);
+                    vectorState = AesNeon.MixColumns(AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 10]));
+                    vectorState = AesNeon.Encrypt(vectorState, *(Vector128<byte>*)&vectorW[16 * 11]);
                     vectorW += 32;
                     goto case (10 + 1) * _Nb;
 
                 case (10 + 1) * _Nb:
-                    var final = AdvSimd.Xor(vectorState, *(Vector128<byte>*)vectorW);
-                    *(Vector128<byte>*)outputPtr = final;
+                    vectorState = AdvSimd.Xor(vectorState, *(Vector128<byte>*)&vectorW[16 * 10]);
+                    *(Vector128<byte>*)outputPtr = vectorState;
                     break;
             }
         }

@@ -31,8 +31,8 @@ internal unsafe class GHash
     {
         if (isSse2Supported)
             return ghashSse2(data, y);
-        //else if (isArmAesSupported)
-        //    return ghashArm(data, y);
+        else if (isArmAesSupported)
+            return ghashArm(data, y);
         else
             return ghash(data, y);
     }
@@ -48,6 +48,11 @@ internal unsafe class GHash
         var z0 = y.L[0];
         var z1 = y.L[1];
 
+        if (len is 0 or 5)
+        {
+            _ = 1;
+        }
+
         fixed (GcmFieldElement* zPreComputed0 = ZPreComputed)
         fixed (byte* pdata = data)
         {
@@ -55,6 +60,11 @@ internal unsafe class GHash
 
             for (; ; )
             {
+                if (segmentIndex / 16 == 655360)
+                {
+                    _ = 1;
+                }
+
                 if (segmentIndex < len)
                 {
                     z0 ^= *(ulong*)&pdata[segmentIndex];

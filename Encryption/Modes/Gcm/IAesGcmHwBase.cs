@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Runtime.Intrinsics;
 
 namespace NiL.Cryptography.Encryption.Modes.Gcm;
 

@@ -68,20 +68,6 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
             authTag[i] = ps[i];
     }
 
-    //private ulong _commonCounter = 0;
-    //private List<(ulong mask, long count)> _counters = Enumerable
-    //    .Range(0, 64 * 64 * 64)
-    //    .Select(i =>
-    //    {
-    //        var bitIndex0 = i >> 12;
-    //        var bitIndex1 = (i >> 6) & 63;
-    //        var bitIndex2 = (i) & 63;
-    //        var mask = (1UL << bitIndex0) | (1UL << bitIndex1) | (1UL << bitIndex2);
-    //        return (mask, 0L);
-    //    })
-    //    .Distinct()
-    //    .ToList();
-
     private readonly static Vector128<byte> _shuffleMask = Vector128.Create((byte)15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 
     private Vector128<byte> encode(bool encrypt, byte* counterBytes, in ReadOnlySpan<byte> input, Span<byte> output, GcmFieldElement gHash)
@@ -154,21 +140,21 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
                     if (encrypt)
                         inputVector = outputVector;
 
-                    var vValue0 = *(Vector128<byte>*)&vv;
-                    var vValue1 = *(Vector128<byte>*)&vv2;
+                    var vValue0 = *(Vector128<ulong>*)&vv;
+                    var vValue1 = *(Vector128<ulong>*)&vv2;
 
                     var shuffled = Sse2.Xor(ghash, Ssse3.Shuffle(inputVector, shuffleMask));
 
-                    var temp1 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vValue0, *(Vector128<ulong>*)&shuffled, 0x10);
-                    var temp2 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vValue1, *(Vector128<ulong>*)&shuffled, 0x00);
-                    var temp3 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vValue0, *(Vector128<ulong>*)&shuffled, 0x11);
-                    var temp4 = Pclmulqdq.CarrylessMultiply(*(Vector128<ulong>*)&vValue1, *(Vector128<ulong>*)&shuffled, 0x01);
+                    var temp1 = Pclmulqdq.CarrylessMultiply(vValue0, *(Vector128<ulong>*)&shuffled, 0x10);
+                    var temp2 = Pclmulqdq.CarrylessMultiply(vValue1, *(Vector128<ulong>*)&shuffled, 0x00);
+                    var temp3 = Pclmulqdq.CarrylessMultiply(vValue0, *(Vector128<ulong>*)&shuffled, 0x11);
+                    var temp4 = Pclmulqdq.CarrylessMultiply(vValue1, *(Vector128<ulong>*)&shuffled, 0x01);
 
                     var product0 = Sse2.Xor(temp1, temp2);
                     var product1 = Sse2.Xor(temp3, temp4);
 
                     var data = default(GcmFieldElement);
-                    Sse2.Store((byte*)&data, *(Vector128<byte>*)&product0);
+                    Sse2.Store((ulong*)&data, product0);
                     var low = data.L[0];
                     var high = data.L[1];
 
@@ -177,13 +163,15 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
                     temp1 = Pclmulqdq.CarrylessMultiply(product0, e1ul2, 0);
                     product0 = Sse2.ShiftLeftLogical128BitLane(temp1, 7);
 
-                    Sse2.Store((byte*)&data, *(Vector128<byte>*)&product1);
+                    Sse2.Store((ulong*)&data, product1);
                     high ^= data.L[0];
                     var high1 = data.L[1];
 
                     *(Vector128<ulong>*)&ghash = Sse2.Xor(
                         product0,
-                        Vector128.Create((high + high) ^ low >> 63, (high1 + high1) ^ high >> 63));
+                        Vector128.Create(
+                            (high + high) ^ low >> 63,
+                            (high1 + high1) ^ high >> 63));
                 }
             }
 
@@ -237,11 +225,12 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
         ((ulong*)counterBytes)[0] ^= *(ulong*)&keySchedule[0];
         ((uint*)counterBytes)[2] ^= keySchedule[2];
 
+        var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
+
         switch (keySize)
         {
             case 1:
             {
-                var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
                 var ks2 = *(Vector128<byte>*)&keySchedule[4 * 2];
                 var ks3 = *(Vector128<byte>*)&keySchedule[4 * 3];
                 var ks4 = *(Vector128<byte>*)&keySchedule[4 * 4];
@@ -274,7 +263,6 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
 
             case 2:
             {
-                var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
                 var ks2 = *(Vector128<byte>*)&keySchedule[4 * 2];
                 var ks3 = *(Vector128<byte>*)&keySchedule[4 * 3];
                 var ks4 = *(Vector128<byte>*)&keySchedule[4 * 4];
@@ -312,7 +300,6 @@ internal unsafe class AesGcmHwX86 : IAesGcmHwBase
 
             default:
             {
-                var ks1 = *(Vector128<byte>*)&keySchedule[4 * 1];
                 var ks2 = *(Vector128<byte>*)&keySchedule[4 * 2];
                 var ks3 = *(Vector128<byte>*)&keySchedule[4 * 3];
                 var ks4 = *(Vector128<byte>*)&keySchedule[4 * 4];

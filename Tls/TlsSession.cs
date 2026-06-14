@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net.Mime;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Threading;
@@ -30,12 +28,11 @@ public partial class TlsSession
     private BigEndianWriteBuffer _handshakeData;
     private TlsState _state;
     private KeyExchangeParams _keyExchangeParams;
-    private KeysSet12 _keyset;
+    private KeysSet12 _keyset12;
     private EphemeralKeysSet _ephemeralKeysSet;
     private TlsContentType _lastReceivedContentType;
     private int _leftToRecieve;
     private IEncryptDecryptProcessor _encryptDecryptPair;
-    private bool _otherSideEncrypted;
     private bool _tls12Encrypted;
     private KeySchedule _keySchedule;
     private readonly List<ITlsExtension> _clientExtensions;
@@ -94,7 +91,7 @@ public partial class TlsSession
 
                 if (_recordsLayerInputStream.Position < _recordsLayerInputStream.Length)
                 {
-                    if (_otherSideEncrypted && _lastReceivedContentType is not TlsContentType.Alert and not TlsContentType.ChangeCipherSpec)
+                    if (_encryptDecryptPair is not null && _lastReceivedContentType is not TlsContentType.Alert and not TlsContentType.ChangeCipherSpec)
                     {
                         var workBuffer = _recordsLayerInputStream.GetBuffer();
                         var encrypted = new ArraySegment<byte>(
@@ -102,9 +99,7 @@ public partial class TlsSession
                             (int)_recordsLayerInputStream.Position,
                             (int)(_recordsLayerInputStream.Length - _recordsLayerInputStream.Position));
 
-                        var decrypted = _encryptDecryptPair.Decrypt(
-                            encrypted,
-                            _lastReceivedContentType);
+                        var decrypted = _encryptDecryptPair.Decrypt(encrypted, _lastReceivedContentType);
 
                         if (TlsVersion < TlsVersion.Tls13)
                         {
@@ -389,8 +384,6 @@ public partial class TlsSession
                 : CipherSuite.KeyScheduleDerivation.CreateKeySet(clientKeyMaterial, serverKeyMaterial);
 
             _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(keyset, TlsVersion);
-
-            _otherSideEncrypted = true;
         }
     }
 
@@ -540,8 +533,7 @@ public partial class TlsSession
             return true;
         }
 
-        _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(_keyset, TlsVersion);
-        _otherSideEncrypted = true;
+        _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(_keyset12, TlsVersion);
 
         if (!isFalseStartAvailable())
         {
@@ -588,18 +580,20 @@ public partial class TlsSession
         {
             var received = (int)_recordsLayerInputStream.Length;
 
-            if (received + _leftToRecieve > _recordsLayerInputStream.Capacity)
+            if (received + _leftToRecieve > _recordsLayerInputStream.Length)
                 _recordsLayerInputStream.Capacity = received + _leftToRecieve;
 
+            var inputBuffer = _recordsLayerInputStream.GetBuffer();
             var client = _socket;
             while (_leftToRecieve != 0 && (client.Available != 0 || wait))
             {
-                var inputBuffer = _recordsLayerInputStream.GetBuffer();
-                var toReceive = Math.Min(_leftToRecieve, Math.Min(inputBuffer.Length - received, client.Available));
+                var toReceive = Math.Min(_leftToRecieve, client.Available);
+                if (toReceive == 0 && wait)
+                    toReceive = 1;
 
                 _recordsLayerInputStream.SetLength(received + toReceive);
 
-                client.Receive(inputBuffer, received, toReceive, SocketFlags.None);
+                toReceive = client.Receive(inputBuffer, received, toReceive, SocketFlags.None);
 
                 received += toReceive;
                 _leftToRecieve -= toReceive;
@@ -1032,9 +1026,9 @@ public partial class TlsSession
         if (TlsVersion < TlsVersion.Tls13)
         {
             verifyData = CipherSuite.PseudoRandomFunction.DeriveKey(
-                _keyset.MasterSecret,
-                "server finished",
-                handshakeHash,
+                _keyset12.MasterSecret, 
+                "server finished", 
+                handshakeHash, 
                 12);
 
             _handshakeData = null;
@@ -1075,7 +1069,7 @@ public partial class TlsSession
                 raiseUnexpectedMessage(TlsContentType.Handshake + "(" + HandshakeType.Finished + ")");
 
             verifyData = CipherSuite.PseudoRandomFunction.DeriveKey(
-                _keyset.MasterSecret,
+                _keyset12.MasterSecret,
                 "client finished",
                 handshakeHash,
                 len);
@@ -1109,9 +1103,7 @@ public partial class TlsSession
                 ? CipherSuite.KeyScheduleDerivation.CreateKeySet(serverKeyMaterial, clientKeyMaterial)
                 : CipherSuite.KeyScheduleDerivation.CreateKeySet(clientKeyMaterial, serverKeyMaterial);
 
-            _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(
-                keyset,
-                TlsVersion);
+            _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(keyset, TlsVersion);
 
             _handshakeData = null;
             _state = TlsState.Ready;
@@ -1139,7 +1131,7 @@ public partial class TlsSession
         var otherSidePublic = read.Bytes(length);
         var preMasterKey = CipherSuite.KeyExchangeAlgorithm.DerivePreMasterKey(otherSidePublic, _ephemeralKeysSet.PrivateKey);
         _ephemeralKeysSet = null;
-        _keyset = CipherSuite.PseudoRandomFunction.DeriveKeySet(preMasterKey, ServerRandom.Opaque, ClientRandom.Opaque, IsServerSide);
+        _keyset12 = CipherSuite.PseudoRandomFunction.DeriveKeySet(preMasterKey, ServerRandom.Opaque, ClientRandom.Opaque, IsServerSide);
         _state = TlsState.ClientKeyExchangeGot;
     }
 
