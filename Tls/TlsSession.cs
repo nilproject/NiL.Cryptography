@@ -8,6 +8,7 @@ using System.Threading;
 using NiL.Cryptography.EllipticCryptography;
 using NiL.Cryptography.Tls.Extensions;
 using NiL.Cryptography.Tls.Extensions.Renegotiation;
+using NiL.Cryptography.Tls.Extensions.SignatureScheme;
 using NiL.Cryptography.Tls.KeyExchange;
 using NiL.Cryptography.Tls.Tls12;
 using NiL.Cryptography.Tls.Tls13;
@@ -83,7 +84,7 @@ public partial class TlsSession
             {
                 if (_leftToRecieve != 0)
                 {
-                    tryToReceiveLeftBytes(waitIncomming);
+                    tryToReceiveRemainingBytes(waitIncomming);
 
                     if (_leftToRecieve != 0)
                         continue;
@@ -379,11 +380,9 @@ public partial class TlsSession
             var serverKeyMaterial = CipherSuite.KeyScheduleDerivation.DeriveTrafficKeyingMaterial(_keySchedule.HandshakeKeys.ServerHandshakeTrafficSecret);
             var clientKeyMaterial = CipherSuite.KeyScheduleDerivation.DeriveTrafficKeyingMaterial(_keySchedule.HandshakeKeys.ClientHandshakeTrafficSecret);
 
-            var keyset = IsServerSide
-                ? CipherSuite.KeyScheduleDerivation.CreateKeySet(serverKeyMaterial, clientKeyMaterial)
-                : CipherSuite.KeyScheduleDerivation.CreateKeySet(clientKeyMaterial, serverKeyMaterial);
-
-            _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(keyset, TlsVersion);
+            _encryptDecryptPair = IsServerSide
+                ? CipherSuite.CreateEncryptDecryptPair(serverKeyMaterial, clientKeyMaterial, TlsVersion)
+                : CipherSuite.CreateEncryptDecryptPair(clientKeyMaterial, serverKeyMaterial, TlsVersion);
         }
     }
 
@@ -533,7 +532,7 @@ public partial class TlsSession
             return true;
         }
 
-        _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(_keyset12, TlsVersion);
+        _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair12(_keyset12, TlsVersion);
 
         if (!isFalseStartAvailable())
         {
@@ -574,7 +573,7 @@ public partial class TlsSession
         return true;
     }
 
-    private void tryToReceiveLeftBytes(bool wait)
+    private void tryToReceiveRemainingBytes(bool wait)
     {
         if (_leftToRecieve != 0)
         {
@@ -594,6 +593,8 @@ public partial class TlsSession
                 _recordsLayerInputStream.SetLength(received + toReceive);
 
                 toReceive = client.Receive(inputBuffer, received, toReceive, SocketFlags.None);
+                if (toReceive == 0)
+                    throw new EndOfStreamException();
 
                 received += toReceive;
                 _leftToRecieve -= toReceive;
@@ -653,7 +654,7 @@ public partial class TlsSession
         }
     }
 
-    private void selectCipherSuite(SupportedGroupsExtension supportedGroupsExtension)
+    private void selectCipherSuite(SupportedGroupsExtension supportedGroupsExtension, SignatureSchemesExtension signatureSchemesExtension)
     {
         for (var i = 0; i < TlsManager.CipherSuites.Length; i++)
         {
@@ -669,7 +670,7 @@ public partial class TlsSession
             for (var j = 0; j < ClientCipherSuites.Length; j++)
             {
                 if (ClientCipherSuites[j] == TlsManager.CipherSuites[i].CipherSuiteId
-
+                    && signatureSchemesExtension.Items.Contains(TlsManager.CipherSuites[i].SignatureAlgorithm.Id)
                     //&& TlsManager.CipherSuites[i].TlsVersions.Contains(TlsVersion)
                     && supportedGroupsExtension is not null && supportedGroupsExtension.NamedGroups.Contains(curveId))
                 {
@@ -864,7 +865,7 @@ public partial class TlsSession
                     keyShareData = (clientSupporedGroups.NamedGroups[i], _ephemeralKeysSet.PublicKey);
 
                     _keySchedule ??= new();
-                    _keySchedule.EarlyKeys = CipherSuite.KeyScheduleDerivation.DeriveEarlyKeys(new byte[32], _handshakeData, false);
+                    _keySchedule.EarlyKeys = CipherSuite.KeyScheduleDerivation.DeriveEarlyKeys(_handshakeData, false);
                     break;
                 }
             }
@@ -1026,9 +1027,9 @@ public partial class TlsSession
         if (TlsVersion < TlsVersion.Tls13)
         {
             verifyData = CipherSuite.PseudoRandomFunction.DeriveKey(
-                _keyset12.MasterSecret, 
-                "server finished", 
-                handshakeHash, 
+                _keyset12.MasterSecret,
+                "server finished",
+                handshakeHash,
                 12);
 
             _handshakeData = null;
@@ -1089,26 +1090,26 @@ public partial class TlsSession
                 throw new InvalidOperationException("client finished signature is invalid");
         }
 
-        if (TlsVersion < TlsVersion.Tls13)
-        {
-            return [writeFinished()];
-        }
-        else
+        if (TlsVersion is TlsVersion.Tls13)
         {
             _keySchedule.MasterKeys = CipherSuite.KeyScheduleDerivation.DeriveMasterKeys(_keySchedule.HandshakeKeys, handshakeHash, true);
             var serverKeyMaterial = CipherSuite.KeyScheduleDerivation.DeriveTrafficKeyingMaterial(_keySchedule.MasterKeys.ServerApplicationTrafficSecret0);
             var clientKeyMaterial = CipherSuite.KeyScheduleDerivation.DeriveTrafficKeyingMaterial(_keySchedule.MasterKeys.ClientApplicationTrafficSecret0);
 
-            var keyset = IsServerSide
-                ? CipherSuite.KeyScheduleDerivation.CreateKeySet(serverKeyMaterial, clientKeyMaterial)
-                : CipherSuite.KeyScheduleDerivation.CreateKeySet(clientKeyMaterial, serverKeyMaterial);
+            var (ourKeyMaterial, theirKeyMaterial) = IsServerSide
+                ? (serverKeyMaterial, clientKeyMaterial)
+                : (clientKeyMaterial, serverKeyMaterial);
 
-            _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(keyset, TlsVersion);
+            _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(ourKeyMaterial, theirKeyMaterial, TlsVersion);
 
             _handshakeData = null;
             _state = TlsState.Ready;
 
             return [];
+        }
+        else
+        {
+            return [writeFinished()];
         }
     }
 
@@ -1218,7 +1219,9 @@ public partial class TlsSession
             }
         }
 
-        selectCipherSuite(_clientExtensions.OfType<SupportedGroupsExtension>().FirstOrDefault());
+        selectCipherSuite(
+            _clientExtensions.OfType<SupportedGroupsExtension>().FirstOrDefault(),
+            _clientExtensions.OfType<SignatureSchemesExtension>().FirstOrDefault());
 
         if (CipherSuite == null || CipherSuite == null || CipherSuite.CipherSuiteId == CipherSuiteId.Unknown)
         {

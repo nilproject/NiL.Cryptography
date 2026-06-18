@@ -1,9 +1,29 @@
-﻿using NiL.Tools;
+﻿namespace NiL.Cryptography.Tls.Extensions;
 
-namespace NiL.Cryptography.Tls.Extensions;
-
-/*public sealed class PreSharedKeyExtension : ITlsExtension<PreSharedKeyExtension>
+/*public abstract class PreSharedKeyExtension : ITlsExtension<PreSharedKeyExtension>
 {
+    public sealed class ClientPreSharedKeyExtension : PreSharedKeyExtension
+    {
+        public OfferedPsks OfferedPsks { get; init; }
+    }
+
+    public sealed class ServerPreSharedKeyExtension : PreSharedKeyExtension
+    {
+        public ushort SelectedIdentity { get; init; }
+    }
+
+    public class PskIdentity
+    {
+        public byte[] Identity { get; init; }
+        public uint ObfuscatedTicketAge { get; init; }
+    }
+
+    public class OfferedPsks
+    {
+        public PskIdentity Identities { get; init; }
+        public byte[][] Binders { get; init; }
+    }
+
     public PreSharedKeyExtension()
     {
     }
@@ -18,7 +38,7 @@ namespace NiL.Cryptography.Tls.Extensions;
 
         if (extensionContext is ExtensionContext.ClientHello)
         {
-            // todo
+            
         }
     }
 }*/

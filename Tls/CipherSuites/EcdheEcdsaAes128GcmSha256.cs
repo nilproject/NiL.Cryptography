@@ -30,20 +30,17 @@ public class EcdheEcdsaAes128GcmSha256 : CipherSuiteBase
     }
 
     public override IHashFunction HashFunction => Sha256.Instance;
-    public override CipherSuiteId CipherSuiteId => CipherSuiteId.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
     public override IPreMasterKeyDerivationAlgorithm KeyExchangeAlgorithm => _derivationAlgorithm;
     public override ISignatureAlgorithm SignatureAlgorithm => _signatureAlgorithm;
     public override PseudoRandomFunction PseudoRandomFunction { get; protected set; }
 
     public override TlsVersion[] TlsVersions { get; } = [TlsVersion.Tls12];
 
-    public override IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)
+    public override IEncryptDecryptProcessor CreateEncryptDecryptPair12(KeysSet12 keysSet, TlsVersion tlsVersion)
     {
         return new EncryptDecryptProcessor(
             tlsVersion,
             keysSet,
-            new GcmMode(new Encryption.Aes(keysSet.OurWriteKey)),
-            new GcmMode(new Encryption.Aes(keysSet.TheirWriteKey)),
             Hmac);
     }
 
@@ -57,15 +54,15 @@ public class EcdheEcdsaAes128GcmSha256 : CipherSuiteBase
         private ulong _outputSeqNumber;
         private ulong _inputSeqNumber;
 
-        public EncryptDecryptProcessor(TlsVersion tlsVersion, KeysSet12 keysSet, GcmMode outputCipher, GcmMode inputCipher, Hmac hmac)
+        public EncryptDecryptProcessor(TlsVersion tlsVersion, KeysSet12 keysSet, Hmac hmac)
         {
             if (keysSet.OurWriteKey is null || keysSet.TheirWriteKey is null
                     || keysSet.OurWriteIV is null || keysSet.TheirWriteIV is null)
                 throw new ArgumentNullException();
 
             _keysSet = keysSet;
-            _outputCipher = outputCipher ?? throw new ArgumentNullException(nameof(outputCipher));
-            _inputCipher = inputCipher ?? throw new ArgumentNullException(nameof(inputCipher));
+            _outputCipher = new GcmMode(new Encryption.Aes(keysSet.OurWriteKey));
+            _inputCipher = new GcmMode(new Encryption.Aes(keysSet.TheirWriteKey));
             _hmac = hmac;
             _tlsVersion = tlsVersion;
         }

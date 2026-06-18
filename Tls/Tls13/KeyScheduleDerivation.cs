@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using NiL.Cryptography.Hashing;
 using NiL.Tools;
 
@@ -66,13 +63,10 @@ public class KeyScheduleDerivation
         _ivLength = ivLength;
     }
 
-    public EarlyKeys DeriveEarlyKeys(byte[] preSharedKey, scoped in ReadOnlySpan<byte> messages, bool isResumption)
+    public EarlyKeys DeriveEarlyKeys(scoped in ReadOnlySpan<byte> messages, bool isResumption)
     {
         var length = _hkdf.Hmac.HashFunction.DigestSize;
-
-        if (preSharedKey.Length != length)
-            throw new InvalidOperationException();
-
+        byte[] preSharedKey = new byte[length];
         var transcriptHash = _hkdf.Hmac.HashFunction.Compute(messages);
         var earlySecret = _hkdf.HkdfExtract(null, preSharedKey);
         var binderKey = expandLabel(earlySecret, isResumption ? "res binder" : "ext binder", _emptyContextHash, length);
@@ -145,7 +139,7 @@ public class KeyScheduleDerivation
         return new TrafficKeyingMaterial(writeKey, writeIv);
     }
 
-    public KeysSet12 CreateKeySet(TrafficKeyingMaterial ourKeyMaterial, TrafficKeyingMaterial theirKeyMaterial)
+    public KeysSet12 CreateKeySet12(TrafficKeyingMaterial ourKeyMaterial, TrafficKeyingMaterial theirKeyMaterial)
     {
         var keyset = new KeysSet12(null, new KeysSizes(0, _keyLength, _ivLength));
 

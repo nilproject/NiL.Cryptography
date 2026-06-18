@@ -1,6 +1,7 @@
-﻿using System;
+﻿using NiL.Cryptography.Numerics;
+using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
-using NiL.Cryptography.Numerics;
 using static NiL.Cryptography.Numerics.NumericsBase;
 
 namespace NiL.Cryptography.EllipticCryptography.WeierstrassForm;
@@ -67,7 +68,7 @@ public sealed class WeierstrassCurvePoint<TSize> : ICurvePoint where TSize : INu
     }
 
     [SkipLocalsInit]
-    public unsafe static WeierstrassCurvePoint<TSize> Mul2n(WeierstrassCurvePoint<TSize> point, int n = 1)
+    public static unsafe WeierstrassCurvePoint<TSize> Mul2n(WeierstrassCurvePoint<TSize> point, int n = 1)
     {
         if (point == null)
             throw new ArgumentNullException(nameof(point));
@@ -306,7 +307,7 @@ public sealed class WeierstrassCurvePoint<TSize> : ICurvePoint where TSize : INu
         return new WeierstrassCurvePoint<TSize> { _x = x2, _y = y2, _z = z2, _curve = point._curve };
     }
 
-    private unsafe static WeierstrassCurvePoint<TSize> doSumProj(WeierstrassCurvePoint<TSize> p1, WeierstrassCurvePoint<TSize> p2)
+    private static WeierstrassCurvePoint<TSize> doSumProj(WeierstrassCurvePoint<TSize> p1, WeierstrassCurvePoint<TSize> p2)
     {
         if (p1 == Zero)
             return p2;
@@ -326,7 +327,7 @@ public sealed class WeierstrassCurvePoint<TSize> : ICurvePoint where TSize : INu
         return result;
     }
 
-    private unsafe static void doSumProj(WeierstrassCurvePoint<TSize> p1, WeierstrassCurvePoint<TSize> p2, WeierstrassCurvePoint<TSize> result)
+    private static void doSumProj(WeierstrassCurvePoint<TSize> p1, WeierstrassCurvePoint<TSize> p2, WeierstrassCurvePoint<TSize> result)
     {
         if (p1._z == 0)
         {
@@ -530,40 +531,46 @@ public sealed class WeierstrassCurvePoint<TSize> : ICurvePoint where TSize : INu
 
     private static WeierstrassCurvePoint<TSize> doSumRef(WeierstrassCurvePoint<TSize> x, WeierstrassCurvePoint<TSize> y)
     {
-        BigUInt<TSize> p = x._curve.P;
-        BigUInt<TSize> m;
+        BigInteger p = x._curve.P.ToBigInteger();
+        BigInteger m;       
 
         if (x.X == y.X)
         {
-            var y2 = x._y + x._y;
+            var y2 = x._y.ToBigInteger() + x._y.ToBigInteger();
             while (y2 > p)
                 y2 -= p;
-            var d = BigUInt<TSize>.ModPow(y2, p - 2, p);
-            var xx = x._x * x._x % p;
-            m = _three * xx + x._curve.A;
+            var d = BigInteger.ModPow(y2, p - 2, p);
+            if (d > p)
+                d %= p;
+
+            var xx = x._x.ToBigInteger() * x._x.ToBigInteger() % p;
+            m = _three.ToBigInteger() * xx + x._curve.A.ToBigInteger();
             while (m > p)
                 m -= p;
             m *= d;
         }
         else
         {
-            var t = p + x._x - y._x;
+            var t = p + x._x.ToBigInteger() - y._x.ToBigInteger();
             while (t > p)
                 t -= p;
-            var d = BigUInt<TSize>.ModPow(t, p - 2, p);
-            m = x._y - y._y;
+            var d = BigInteger.ModPow(t, p - 2, p);
+            if (d > p)
+                d %= p;
+
+            m = x._y.ToBigInteger() - y._y.ToBigInteger();
             if (x._y < y._y)
                 m += p;
             m *= d;
         }
 
         m %= p;
-        var xr = (p + p + m * m - x._x - y._x) % p;
-        var mm = m * ((p + xr - x._x) % p) % p;
-        var yr = (p + p - (x._y + mm)) % p;
+        var xr = (p + p + m * m - x._x.ToBigInteger() - y._x.ToBigInteger()) % p;
+        var mm = m * ((p + xr - x._x.ToBigInteger()) % p) % p;
+        var yr = (p + p - (x._y.ToBigInteger() + mm)) % p;
 
         //return new CurvePoint<TSize>{ _x = xr, _y = yr, _curve = x._curve };
-        return new WeierstrassCurvePoint<TSize>(xr, yr, x._curve);
+        return new WeierstrassCurvePoint<TSize>(BigUInt<TSize>.FromBytes(xr.ToByteArray()), BigUInt<TSize>.FromBytes(yr.ToByteArray()), x._curve);
     }
 
     ICurvePoint ICurvePoint.Multiply(IBigUInt number) => (BigUInt<TSize>)number * this;

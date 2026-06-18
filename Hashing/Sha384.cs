@@ -5,14 +5,15 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace NiL.Cryptography.Hashing;
-public class Sha512 : IHashFunction
+
+public class Sha384 : IHashFunction
 {
-    public static readonly Sha512 Instance = new Sha512();
-    private Sha512() { }
+    public static readonly Sha384 Instance = new Sha384();
+    private Sha384() { }
 
     public unsafe struct FixedUint64Array
     {
-        private const int _len = 8;
+        private const int _len = 6;
 
         private fixed ulong _data[_len];
 
@@ -40,7 +41,7 @@ public class Sha512 : IHashFunction
 
     public unsafe struct FixedByteArray : IEnumerable<byte>
     {
-        private const int _len = 64;
+        private const int _len = 48;
 
         private fixed byte _data[_len];
 
@@ -83,7 +84,7 @@ public class Sha512 : IHashFunction
         [FieldOffset(0)]
         public readonly FixedByteArray AsBytes;
 
-        internal Result(ulong x0, ulong x1, ulong x2, ulong x3, ulong x4, ulong x5, ulong x6, ulong x7) : this()
+        internal Result(ulong x0, ulong x1, ulong x2, ulong x3, ulong x4, ulong x5) : this()
         {
             AsUint64[0] = x0;
             AsUint64[1] = x1;
@@ -91,8 +92,6 @@ public class Sha512 : IHashFunction
             AsUint64[3] = x3;
             AsUint64[4] = x4;
             AsUint64[5] = x5;
-            AsUint64[6] = x6;
-            AsUint64[7] = x7;
         }
     }
 
@@ -118,7 +117,7 @@ public class Sha512 : IHashFunction
 
     public int BlockSize => 128;
 
-    public int DigestSize => 64;
+    public int DigestSize => 48;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ulong rightRotate(int bits, ulong x) => ((x >> bits) | (x << (64 - bits)));
@@ -145,14 +144,14 @@ public class Sha512 : IHashFunction
         *(uint*)(&tail[additionalSize - 8]) = (uint)(messageLen * 8L >> 32);
         *(uint*)(&tail[additionalSize - 4]) = (uint)(messageLen * 8L);
 
-        ulong h0 = 0x6a09e667f3bcc908;
-        ulong h1 = 0xbb67ae8584caa73b;
-        ulong h2 = 0x3c6ef372fe94f82b;
-        ulong h3 = 0xa54ff53a5f1d36f1;
-        ulong h4 = 0x510e527fade682d1;
-        ulong h5 = 0x9b05688c2b3e6c1f;
-        ulong h6 = 0x1f83d9abfb41bd6b;
-        ulong h7 = 0x5be0cd19137e2179;
+        ulong h0 = 0xCBBB9D5DC1059ED8;
+        ulong h1 = 0x629A292A367CD507;
+        ulong h2 = 0x9159015A3070DD17;
+        ulong h3 = 0x152FECD8F70E5939;
+        ulong h4 = 0x67332667FFC00B31;
+        ulong h5 = 0x8EB44A8768581511;
+        ulong h6 = 0xDB0C2E0D64F98FA7;
+        ulong h7 = 0x47B5481DBEFA4FA4;
 
         var w64 = stackalloc ulong[16];
         var w32 = (uint*)w64;
@@ -311,7 +310,7 @@ public class Sha512 : IHashFunction
             }
         }
 
-        return new Result(h0, h1, h2, h3, h4, h5, h6, h7);
+        return new Result(h0, h1, h2, h3, h4, h5);
     }
 
     byte[] IHashFunction.Compute(in ReadOnlySpan<byte> data)

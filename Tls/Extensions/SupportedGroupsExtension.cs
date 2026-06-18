@@ -1,5 +1,4 @@
-﻿using System;
-using NiL.Cryptography.EllipticCryptography;
+﻿using NiL.Cryptography.EllipticCryptography;
 using NiL.Tools;
 
 namespace NiL.Cryptography.Tls.Extensions;

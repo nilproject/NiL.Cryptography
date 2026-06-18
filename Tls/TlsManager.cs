@@ -56,7 +56,7 @@ public sealed class TlsManager
         if (!isServerAuthAllowed)
             throw new InvalidOperationException();
 
-        CipherSuites = buildEllipticCipherSuites(privateKeyBug);
+        CipherSuites = buildCipherSuites(privateKeyBug);
         CertChainBinary = buildCertChain();
     }
 
@@ -76,7 +76,7 @@ public sealed class TlsManager
         return result.ToArray();
     }
 
-    private CipherSuiteBase[] buildEllipticCipherSuites(PkcsSafeBag privateKeyBug)
+    private CipherSuiteBase[] buildCipherSuites(PkcsSafeBag privateKeyBug)
     {
         var signCurve = default(CurveDefinition);
         var certKeyExchangeAlgorithm = default(KeyExchangeAlgorithm);
@@ -113,13 +113,13 @@ public sealed class TlsManager
                 var p256derivationAlgorithm = new EcdhKeyDerivation(NamedCurveRegistry.Secp256r1);
                 var x25519derivationAlgorithm = new EcdhKeyDerivation(NamedCurveRegistry.X25519);
 
-                WeierstrassEcdsa ecdsa;
+                WeierstrassEcdsa ecdsa256;
 
                 switch (signCurve.Name)
                 {
                     case NamedCurve.Secp256r1:
                     {
-                        ecdsa = new WeierstrassEcdsa(BigUInt<B512>.FromBytes(privateKey, true),
+                        ecdsa256 = new WeierstrassEcdsa(BigUInt<B512>.FromBytes(privateKey, true),
                                             signCurve,
                                             Hashing.Sha256.Instance,
                                             RandomNumberGenerator.Create(),
@@ -130,11 +130,13 @@ public sealed class TlsManager
                     default: throw new NotImplementedException();
                 }
 
-                cipherSuites.Add(new TlsAes128GcmSha256(x25519derivationAlgorithm, ecdsa));
-                cipherSuites.Add(new TlsAes128GcmSha256(p256derivationAlgorithm, ecdsa));
-                cipherSuites.Add(new EcdheEcdsaAes128GcmSha256(p256derivationAlgorithm, ecdsa));
-                cipherSuites.Add(new EcdheEcdsaAes128CbcSha256(p256derivationAlgorithm, ecdsa));
-                cipherSuites.Add(new EcdheEcdsaAes128CbcSha(p256derivationAlgorithm, ecdsa));
+                cipherSuites.Add(new TlsAes256GcmSha384(x25519derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new TlsAes256GcmSha384(p256derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new TlsAes128GcmSha256(x25519derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new TlsAes128GcmSha256(p256derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new EcdheEcdsaAes128GcmSha256(p256derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new EcdheEcdsaAes128CbcSha256(p256derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new EcdheEcdsaAes128CbcSha(p256derivationAlgorithm, ecdsa256));
                 break;
             }
 

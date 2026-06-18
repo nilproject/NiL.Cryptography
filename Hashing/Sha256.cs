@@ -115,9 +115,16 @@ public class Sha256 : IHashFunction
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint rightRotate(int bits, uint x) => ((x >> bits) | (x << (32 - bits)));
+    //private static uint rightRotate(int bits, uint x) => (uint)((x * 0x1_0000_0001ul) >> bits);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint e1Ch(uint x, uint y, uint z) => (rightRotate(6, x) ^ rightRotate(11, x) ^ rightRotate(25, x)) + ((x & y) | (~x & z));
+    //private static uint e1Ch(uint x, uint y, uint z)
+    //{
+    //    var t = Pclmulqdq.CarrylessMultiply(Vector128.Create((ulong)x), Vector128.Create(2322172853370881ul), 0);
+    //    t = Sse2.ShiftRightLogical(t, 25);
+    //    return (uint)((ulong*)&t)[0] + ((x & y) | (~x & z));
+    //}
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint e0Maj(uint x, uint y, uint z) => (rightRotate(2, x) ^ rightRotate(13, x) ^ rightRotate(22, x)) + ((z | (x & y)) & (x | y));
@@ -128,6 +135,7 @@ public class Sha256 : IHashFunction
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint s1(uint x) => rightRotate(17, x) ^ rightRotate(19, x) ^ (x >> 10);
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static unsafe Result Compute(in ReadOnlySpan<byte> message)
     {
         var messageLen = message.Length;

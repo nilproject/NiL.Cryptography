@@ -15,10 +15,9 @@ public sealed class EcdheEcdsaAes128CbcSha : CbcCipherSuite
     {
     }
 
-    public override CipherSuiteId CipherSuiteId => CipherSuiteId.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA;
     public override IHashFunction HashFunction => Sha1.Instance;
 
-    public override IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)
+    public override IEncryptDecryptProcessor CreateEncryptDecryptPair12(KeysSet12 keysSet, TlsVersion tlsVersion)
     {
         var outputCiph = new Encryption.Aes(keysSet.OurWriteKey);
         var inputCiph = new Encryption.Aes(keysSet.TheirWriteKey);

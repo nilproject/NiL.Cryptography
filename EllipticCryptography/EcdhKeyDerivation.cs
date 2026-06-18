@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using NiL.Cryptography.Numerics;
@@ -18,7 +17,7 @@ public class EcdhKeyDerivation : IPreMasterKeyDerivationAlgorithm, IEllipticCurv
     private readonly int _minPoolSize;
     private int _isPoolFilling;
 
-    public EcdhKeyDerivation(CurveDefinition curve, int maxPoolSize = 100, int minPoolSize = 95)
+    public EcdhKeyDerivation(CurveDefinition curve, int maxPoolSize = 200, int minPoolSize = 95)
     {
         CurveDefinition = curve;
         _maxPoolSize = maxPoolSize;
@@ -205,7 +204,7 @@ public class EcdhKeyDerivation : IPreMasterKeyDerivationAlgorithm, IEllipticCurv
 
         // https://tools.ietf.org/html/rfc4492#section-5.10
         var point = (privateKeyI * otherSidePublicPoint).Normalize();
-
+        
         return point.X.ToBytes(KeyLength, isNetworkOrder);
     }
 
