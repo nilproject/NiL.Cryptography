@@ -325,7 +325,7 @@ internal
         return (int)o;
     }
 
-    [SkipLocalsInit]
+    //[SkipLocalsInit]
     public static void DivMod(uint* left, uint* right, uint* result, int length)
     {
         if (length == 1)
@@ -360,72 +360,89 @@ internal
         var sub = stackalloc uint[length];
 
         for (; ; )
-        {
-            while (topX >= 0 && left[topX] == 0)
-                topX--;
-
-            if (topX < topY)
-                break;
-
-            tTopX = topX;
-            l = left[tTopX];
-            if (tTopX > topY)
-                l = l << 32 | left[--tTopX];
-
-            d = l / r1;
-            if (d == 0)
+            checked
             {
-                if (l >= r)
-                    d = 1; // last iteration
-                else
-                    return;
-            }
+                while (topX >= 0 && left[topX] == 0)
+                    topX--;
 
+                if (topX < topY)
+                    break;
 
-            delta = tTopX - topY;
-            int lmd = length - delta;
-            count = topY + 2; // for overflow
-            if (count > lmd)
-                count = lmd;
+                tTopX = topX;
+                l = left[tTopX];
+                if (tTopX > topY)
+                    l = l << 32 | left[--tTopX];
 
-            for (; ; )
-            {
-                o = 0ul;
+                d = l / r1;
+                if (d == 0)
                 {
-                    for (var i = 0; i < count; i++)
-                    {
-                        o += right[i] * d;
-                        sub[i] = (uint)o;
-                        o >>= 32;
-                    }
-                }
-
-                if (Sub(left + delta, sub, left + delta, lmd) != 0)
-                {
-                    Add(left + delta, sub, left + delta, lmd);
-                    d >>= 1;
-                    if (d == 0) // last iteration
+                    if (l >= r)
+                        d = 1; // last iteration
+                    else
                         return;
                 }
-                else
+
+
+                delta = tTopX - topY;
+                int lmd = length - delta;
+                count = topY + 2; // for overflow
+                if (count > lmd)
+                    count = lmd;
+
+                for (; ; )
                 {
-                    if (result != null)
+                    o = 0ul;
                     {
-                        o = result[delta] + d;
-                        result[delta] = (uint)o;
-                        o >>= 32;
-                        for (var i = delta + 1; o != 0 && i < length; i++)
+                        var m = unchecked((uint)d);
+                        for (var i = 0; i < count; i++)
                         {
-                            o += result[i];
-                            result[i] = (uint)o;
+                            o += right[i] * (ulong)m;
+                            sub[i] = unchecked((uint)o);
                             o >>= 32;
+                        }
+
+                        m = unchecked((uint)(d >> 32));
+                        if (m != 0)
+                        {
+                            for (var i = 0; i < count - 1;)
+                            {
+                                o += right[i] * (ulong)m;
+                                o += sub[++i];
+                                sub[i] = unchecked((uint)o);
+                                o >>= 32;
+                            }
+
+                            if (o != 0)
+                                throw new OverflowException();
                         }
                     }
 
-                    break;
+                    if (Sub(left + delta, sub, left + delta, lmd) != 0)
+                    {
+                        Add(left + delta, sub, left + delta, lmd);
+                        d >>= 1;
+                        if (d == 0) // last iteration
+                            return;
+                    }
+                    else
+                    {
+                        if (result != null)
+                        {
+                            o = result[delta] + d;
+                            result[delta] = unchecked((uint)o);
+                            o >>= 32;
+                            for (var i = delta + 1; o != 0 && i < length; i++)
+                            {
+                                o += result[i];
+                                result[i] = (uint)o;
+                                o >>= 32;
+                            }
+                        }
+
+                        break;
+                    }
                 }
             }
-        }
     }
 
 #if BENCH
