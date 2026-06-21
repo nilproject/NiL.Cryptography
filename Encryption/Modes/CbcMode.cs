@@ -35,7 +35,7 @@ public sealed class CbcMode : IBlockCipher
 
     public byte[] IV => _iv;
 
-    public void Encrypt(in Span<byte> input, in Span<byte> output)
+    public void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         if (output.Length < input.Length)
             throw new ArgumentOutOfRangeException();
@@ -101,7 +101,7 @@ public sealed class CbcMode : IBlockCipher
     }
 
     // TODO: перенести оптимизации из шифрования
-    public void Decrypt(in Span<byte> input, in Span<byte> output)
+    public void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         if (output.Length < input.Length)
             throw new ArgumentOutOfRangeException();

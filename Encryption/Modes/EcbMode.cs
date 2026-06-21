@@ -16,7 +16,7 @@ internal sealed class EcbMode : IBlockCipher
 
     public byte[] Key { get => BlockCipher.Key; }
 
-    public void Encrypt(in Span<byte> input, in Span<byte> output)
+    public void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         var inputBlock = new byte[BlockCipher.InputBlockSize];
         var outBlock = new byte[BlockCipher.OutBlockSize];
@@ -39,7 +39,7 @@ internal sealed class EcbMode : IBlockCipher
         }
     }
 
-    public void Decrypt(in Span<byte> input, in Span<byte> output)
+    public void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         var inputBlock = new byte[BlockCipher.InputBlockSize];
         var outBlock = new byte[BlockCipher.OutBlockSize];

@@ -54,8 +54,8 @@ public sealed class GcmMode : IAeadCipher
     private readonly GCtr _gCtr;
     private IAesGcmHwBase _aesGcmHw;
 
-    public int InputBlockSize => _blockCipher.InputBlockSize;
-    public int OutBlockSize => _blockCipher.OutBlockSize;
+    public int InputBlockSize => 1;
+    public int OutBlockSize => 1;
     public byte[] Key
     {
         get => _blockCipher.Key;

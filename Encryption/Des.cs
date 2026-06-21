@@ -196,17 +196,17 @@ public sealed class Des : IBlockCipher
         Key = key;
     }
 
-    public void Decrypt(in Span<byte> input, in Span<byte> output)
+    public void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         crypt(input, output, false);
     }
 
-    public void Encrypt(in Span<byte> input, in Span<byte> output)
+    public void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         crypt(input, output, true);
     }
 
-    private unsafe void crypt(Span<byte> input, Span<byte> output, bool encrypt)
+    private unsafe void crypt(ReadOnlySpan<byte> input, Span<byte> output, bool encrypt)
     {
         if (input.Length != 8)
             throw new ArgumentOutOfRangeException(nameof(input));

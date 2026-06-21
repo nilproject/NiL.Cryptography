@@ -9,6 +9,6 @@ public interface IBlockCipher
     int InputBlockSize { get; }
     int OutBlockSize { get; }
     
-    void Encrypt(in Span<byte> input, in Span<byte> output);
-    void Decrypt(in Span<byte> input, in Span<byte> output);
+    void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output);
+    void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output);
 }

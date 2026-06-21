@@ -303,7 +303,7 @@ public sealed class RC2 : IBlockCipher
     public int InputBlockSize => 8;
     public int OutBlockSize => 8;
 
-    public unsafe void Encrypt(in Span<byte> input, in Span<byte> output)
+    public unsafe void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         fixed (byte* l = _keySchedule)
         {
@@ -357,7 +357,7 @@ public sealed class RC2 : IBlockCipher
         }
     }
 
-    public unsafe void Decrypt(in Span<byte> input, in Span<byte> output)
+    public unsafe void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         fixed (byte* l = _keySchedule)
         {
@@ -411,7 +411,7 @@ public sealed class RC2 : IBlockCipher
         }
     }
 
-    private void prologue(Span<byte> input, in Span<byte> output)
+    private void prologue(ReadOnlySpan<byte> input, in Span<byte> output)
     {
         if (input.Length != 8)
             throw new ArgumentException(nameof(input));

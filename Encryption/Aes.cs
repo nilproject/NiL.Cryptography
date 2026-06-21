@@ -249,7 +249,7 @@ public sealed class Aes : IBlockCipher
             InvSbox[Sbox[i]] = (byte)i;
     }
 
-    public unsafe void Decrypt(in Span<byte> input, in Span<byte> output)
+    public unsafe void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         if (input.Length != 16)
             throw new ArgumentOutOfRangeException(nameof(input));
@@ -343,7 +343,7 @@ public sealed class Aes : IBlockCipher
         ((ulong*)output)[1] = ((ulong*)state)[1];
     }
 
-    public unsafe void Encrypt(in Span<byte> input, in Span<byte> output)
+    public unsafe void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         if (input.Length != 16)
             throw new ArgumentOutOfRangeException(nameof(input));

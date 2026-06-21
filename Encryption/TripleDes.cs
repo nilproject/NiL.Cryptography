@@ -40,7 +40,7 @@ public sealed class TripleDes : IBlockCipher
         }
     }
 
-    public void Decrypt(in Span<byte> input, in Span<byte> output)
+    public void Decrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
 
         if (input.Length != 8)
@@ -53,7 +53,7 @@ public sealed class TripleDes : IBlockCipher
         _des0.Decrypt(output, output);
     }
 
-    public void Encrypt(in Span<byte> input, in Span<byte> output)
+    public void Encrypt(in ReadOnlySpan<byte> input, in Span<byte> output)
     {
         if (input.Length != 8)
             throw new ArgumentException();
