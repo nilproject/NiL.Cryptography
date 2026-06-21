@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace NiL.Cryptography.Tls.Tls12;
+namespace NiL.Cryptography.Tls;
 
 public interface IEncryptDecryptProcessor
 {

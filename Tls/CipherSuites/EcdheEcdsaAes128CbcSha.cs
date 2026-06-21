@@ -1,4 +1,5 @@
-﻿using NiL.Cryptography.EllipticCryptography;
+﻿using System;
+using NiL.Cryptography.EllipticCryptography;
 using NiL.Cryptography.EllipticCryptography.WeierstrassForm.Signature;
 using NiL.Cryptography.Encryption.Modes;
 using NiL.Cryptography.Hashing;
@@ -17,8 +18,11 @@ public sealed class EcdheEcdsaAes128CbcSha : CbcCipherSuite
 
     public override IHashFunction HashFunction => Sha1.Instance;
 
-    public override IEncryptDecryptProcessor CreateEncryptDecryptPair12(KeysSet12 keysSet, TlsVersion tlsVersion)
+    public override IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)
     {
+        if (tlsVersion is not TlsVersion.Tls12)
+            throw new ArgumentException(nameof(tlsVersion));
+
         var outputCiph = new Encryption.Aes(keysSet.OurWriteKey);
         var inputCiph = new Encryption.Aes(keysSet.TheirWriteKey);
         return new EncryptDecryptProcessor(

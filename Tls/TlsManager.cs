@@ -130,6 +130,8 @@ public sealed class TlsManager
                     default: throw new NotImplementedException();
                 }
 
+                cipherSuites.Add(new ChaCha20Poly1305Sha256(x25519derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new ChaCha20Poly1305Sha256(p256derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new TlsAes256GcmSha384(x25519derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new TlsAes256GcmSha384(p256derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new TlsAes128GcmSha256(x25519derivationAlgorithm, ecdsa256));

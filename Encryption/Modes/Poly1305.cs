@@ -28,18 +28,27 @@ public class Poly1305(IBlockCipher blockCipher) : IAeadCipher
         if (authData.Length > 16)
             throw new ArgumentException(nameof(authData) + " is too large");
 
-        if (iv.Length > 0)
-            throw new ArgumentException(nameof(iv) + " is not supported");
-
         if (input.Length > output.Length)
             throw new ArgumentException("input and output must be the equal size");
 
         var p = stackalloc uint[] { 0xfffffffb, 0xffffffff, 0xffffffff, 0xffffffff, 0x3, 0, 0, 0, 0, 0 };
         var r = stackalloc uint[10];
         var s = stackalloc uint[10];
+        var n = stackalloc uint[10];
+
+        for (var i = 0; i < authData.Length; i++)
+        {
+            ((byte*)n)[i] = authData[i];
+        }
 
         if (blockCipher is ChaCha20 chaCha20)
         {
+            if (iv.Length > 0)
+            {
+                for (var i = 0; i < iv.Length; i++)
+                    chaCha20.Nonce[i] = iv[i];
+            }
+
             chaCha20.BlockCounter = 0;
 
             Span<byte> state = stackalloc byte[32];
@@ -59,6 +68,9 @@ public class Poly1305(IBlockCipher blockCipher) : IAeadCipher
         }
         else
         {
+            if (iv.Length > 0)
+                throw new ArgumentException(nameof(iv) + " is not supported for ciphers other then ChaCha20");
+
             // NEED TO CHECK
 
             if (Key is not null)
@@ -125,17 +137,11 @@ public class Poly1305(IBlockCipher blockCipher) : IAeadCipher
         {
             var bufferPos = 0;
             var accumulator = stackalloc uint[10];
-            var n = stackalloc uint[10];
             var temp = stackalloc uint[10];
 
             bufferPos = 0;
 
             ((byte*)n)[16] = 1;
-
-            for (var i = 0; i < authData.Length; i++)
-            {
-                ((byte*)n)[i] = authData[i];
-            }
 
             NumericsBase.Add(accumulator, n, temp, 10);
             NumericsBase.Mul(temp, r, accumulator, 10);
@@ -163,7 +169,7 @@ public class Poly1305(IBlockCipher blockCipher) : IAeadCipher
 
             NumericsBase.Add(accumulator, n, temp, 10);
             NumericsBase.Mul(temp, r, accumulator, 10);
-            NumericsBase.Mod(accumulator, p, 10);
+            NumericsBase.DivMod(accumulator, p, null, 10);
 
             n[0] = (uint)authData.Length;
             n[1] = 0;
@@ -172,7 +178,7 @@ public class Poly1305(IBlockCipher blockCipher) : IAeadCipher
 
             NumericsBase.Add(accumulator, n, temp, 10);
             NumericsBase.Mul(temp, r, accumulator, 10);
-            NumericsBase.Mod(accumulator, p, 10);
+            NumericsBase.DivMod(accumulator, p, null, 10);
 
             NumericsBase.Add(s, accumulator, accumulator, 10);
 

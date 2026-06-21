@@ -1,6 +1,6 @@
 ﻿using NiL.Cryptography.Tls.KeyExchange;
 
-namespace NiL.Cryptography.Tls.Tls12;
+namespace NiL.Cryptography.Tls;
 
 public interface IPreMasterKeyDerivationAlgorithm
 {

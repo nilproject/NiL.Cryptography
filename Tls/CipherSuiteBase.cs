@@ -23,7 +23,7 @@ public abstract class CipherSuiteBase
     public virtual KeyScheduleDerivation KeyScheduleDerivation { get; protected set; }
     public abstract TlsVersion[] TlsVersions { get; }
 
-    public virtual IEncryptDecryptProcessor CreateEncryptDecryptPair12(KeysSet12 keysSet, TlsVersion tlsVersion)
+    public virtual IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)
         => throw new System.NotSupportedException();
 
     public virtual IEncryptDecryptProcessor CreateEncryptDecryptPair(TrafficKeyingMaterial ourKeyMaterial, TrafficKeyingMaterial theirKeyMaterial, TlsVersion tlsVersion)

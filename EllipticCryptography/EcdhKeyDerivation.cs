@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using NiL.Cryptography.Numerics;
 using NiL.Cryptography.Tls;
 using NiL.Cryptography.Tls.KeyExchange;
-using NiL.Cryptography.Tls.Tls12;
 
 namespace NiL.Cryptography.EllipticCryptography;
 

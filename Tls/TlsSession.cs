@@ -532,7 +532,7 @@ public partial class TlsSession
             return true;
         }
 
-        _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair12(_keyset12, TlsVersion);
+        _encryptDecryptPair = CipherSuite.CreateEncryptDecryptPair(_keyset12, TlsVersion);
 
         if (!isFalseStartAvailable())
         {

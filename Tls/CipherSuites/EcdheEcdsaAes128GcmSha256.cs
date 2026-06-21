@@ -36,7 +36,7 @@ public class EcdheEcdsaAes128GcmSha256 : CipherSuiteBase
 
     public override TlsVersion[] TlsVersions { get; } = [TlsVersion.Tls12];
 
-    public override IEncryptDecryptProcessor CreateEncryptDecryptPair12(KeysSet12 keysSet, TlsVersion tlsVersion)
+    public override IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)
     {
         return new EncryptDecryptProcessor(
             tlsVersion,
