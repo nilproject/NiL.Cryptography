@@ -656,9 +656,9 @@ public partial class TlsSession
 
     private void selectCipherSuite(SupportedGroupsExtension supportedGroupsExtension, SignatureSchemesExtension signatureSchemesExtension)
     {
-        for (var serverCipherSuiteIndex = 0; serverCipherSuiteIndex < TlsManager.CipherSuites.Length; serverCipherSuiteIndex++)
+        for (var clientCipherSuiteIndex = 0; clientCipherSuiteIndex < ClientCipherSuites.Length; clientCipherSuiteIndex++)
         {
-            for (var clientCipherSuiteIndex = 0; clientCipherSuiteIndex < ClientCipherSuites.Length; clientCipherSuiteIndex++)
+            for (var serverCipherSuiteIndex = 0; serverCipherSuiteIndex < TlsManager.CipherSuites.Length; serverCipherSuiteIndex++)
             {
                 var serverChipherSuite = TlsManager.CipherSuites[serverCipherSuiteIndex];
                 var curveId = (serverChipherSuite.KeyExchangeAlgorithm as IEllipticCurveProvider).CurveDefinition.Name;
@@ -670,6 +670,7 @@ public partial class TlsSession
                     continue;
 
                 if (ClientCipherSuites[clientCipherSuiteIndex] == TlsManager.CipherSuites[serverCipherSuiteIndex].CipherSuiteId
+                    && (TlsVersion < TlsVersion.Tls13 || TlsManager.CipherSuites[serverCipherSuiteIndex].TlsVersions[0] >= TlsVersion.Tls13)
                     && signatureSchemesExtension.Items.Contains(TlsManager.CipherSuites[serverCipherSuiteIndex].SignatureAlgorithm.Id)
                     && supportedGroupsExtension is not null && supportedGroupsExtension.NamedGroups.Contains(curveId))
                 {
