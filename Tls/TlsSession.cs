@@ -92,7 +92,7 @@ public partial class TlsSession
 
                 if (_recordsLayerInputStream.Position < _recordsLayerInputStream.Length)
                 {
-                    if (_encryptDecryptPair is not null && _lastReceivedContentType is not TlsContentType.Alert and not TlsContentType.ChangeCipherSpec)
+                    if (_encryptDecryptPair is not null && _lastReceivedContentType is not TlsContentType.ChangeCipherSpec)
                     {
                         var workBuffer = _recordsLayerInputStream.GetBuffer();
                         var encrypted = new ArraySegment<byte>(
@@ -656,22 +656,21 @@ public partial class TlsSession
 
     private void selectCipherSuite(SupportedGroupsExtension supportedGroupsExtension, SignatureSchemesExtension signatureSchemesExtension)
     {
-        for (var i = 0; i < TlsManager.CipherSuites.Length; i++)
+        for (var serverCipherSuiteIndex = 0; serverCipherSuiteIndex < TlsManager.CipherSuites.Length; serverCipherSuiteIndex++)
         {
-            var serverChipherSuite = TlsManager.CipherSuites[i];
-            var curveId = (serverChipherSuite.KeyExchangeAlgorithm as IEllipticCurveProvider).CurveDefinition.Name;
-
-            var isTls12Allowed = TlsManager.IsTls12Enabled && serverChipherSuite.TlsVersions.Contains(TlsVersion.Tls12);
-            var isTls13Allowed = TlsManager.IsTls13Enabled && serverChipherSuite.TlsVersions.Contains(TlsVersion.Tls13);
-
-            if (!isTls12Allowed && !isTls13Allowed)
-                continue;
-
-            for (var j = 0; j < ClientCipherSuites.Length; j++)
+            for (var clientCipherSuiteIndex = 0; clientCipherSuiteIndex < ClientCipherSuites.Length; clientCipherSuiteIndex++)
             {
-                if (ClientCipherSuites[j] == TlsManager.CipherSuites[i].CipherSuiteId
-                    && signatureSchemesExtension.Items.Contains(TlsManager.CipherSuites[i].SignatureAlgorithm.Id)
-                    //&& TlsManager.CipherSuites[i].TlsVersions.Contains(TlsVersion)
+                var serverChipherSuite = TlsManager.CipherSuites[serverCipherSuiteIndex];
+                var curveId = (serverChipherSuite.KeyExchangeAlgorithm as IEllipticCurveProvider).CurveDefinition.Name;
+
+                var isTls12Allowed = TlsManager.IsTls12Enabled && serverChipherSuite.TlsVersions.Contains(TlsVersion.Tls12);
+                var isTls13Allowed = TlsManager.IsTls13Enabled && serverChipherSuite.TlsVersions.Contains(TlsVersion.Tls13);
+
+                if (!isTls12Allowed && !isTls13Allowed)
+                    continue;
+
+                if (ClientCipherSuites[clientCipherSuiteIndex] == TlsManager.CipherSuites[serverCipherSuiteIndex].CipherSuiteId
+                    && signatureSchemesExtension.Items.Contains(TlsManager.CipherSuites[serverCipherSuiteIndex].SignatureAlgorithm.Id)
                     && supportedGroupsExtension is not null && supportedGroupsExtension.NamedGroups.Contains(curveId))
                 {
                     CipherSuite = serverChipherSuite;

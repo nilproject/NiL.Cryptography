@@ -31,9 +31,7 @@ public abstract class CbcCipherSuite : CipherSuiteBase
         _derivationAlgorithm = masterKeyDerivationAlgorithm ?? throw new ArgumentNullException(nameof(masterKeyDerivationAlgorithm));
         _ecdsa = ecdsa ?? throw new ArgumentNullException(nameof(ecdsa));
 
-        var keysSizes = new KeysSizes(HashFunction.DigestSize, 16, 0);
-
-        PseudoRandomFunction = new PseudoRandomFunction(Hmac, keysSizes);
+        PseudoRandomFunction = new PseudoRandomFunction(Hmac, KeysSizes);
     }
 
     protected sealed class EncryptDecryptProcessor : IEncryptDecryptProcessor

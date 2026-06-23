@@ -22,6 +22,7 @@ public abstract class CipherSuiteBase
     public virtual PseudoRandomFunction PseudoRandomFunction { get; protected set; }
     public virtual KeyScheduleDerivation KeyScheduleDerivation { get; protected set; }
     public abstract TlsVersion[] TlsVersions { get; }
+    public abstract KeysSizes KeysSizes { get; }
 
     public virtual IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)
         => throw new System.NotSupportedException();

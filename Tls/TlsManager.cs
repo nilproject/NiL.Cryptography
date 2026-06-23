@@ -136,6 +136,8 @@ public sealed class TlsManager
                 cipherSuites.Add(new TlsAes256GcmSha384(p256derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new TlsAes128GcmSha256(x25519derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new TlsAes128GcmSha256(p256derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new EcdheEcdsaChaCha20Poly1305Sha256(p256derivationAlgorithm, ecdsa256));
+                cipherSuites.Add(new EcdheEcdsaAes256GcmSha384(p256derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new EcdheEcdsaAes128GcmSha256(p256derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new EcdheEcdsaAes128CbcSha256(p256derivationAlgorithm, ecdsa256));
                 cipherSuites.Add(new EcdheEcdsaAes128CbcSha(p256derivationAlgorithm, ecdsa256));

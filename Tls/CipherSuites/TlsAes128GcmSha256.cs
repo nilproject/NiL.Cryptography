@@ -12,8 +12,11 @@ public class TlsAes128GcmSha256 : Tls13CipherSuiteBase
 {
     public TlsAes128GcmSha256(EcdhKeyDerivation keyDerivationAlgorithm, WeierstrassEcdsa ecdsa) : base(keyDerivationAlgorithm, ecdsa)
     {
-        KeyScheduleDerivation = new KeyScheduleDerivation(Hmac, 16, 12);
+        var keySizes = KeysSizes;
+        KeyScheduleDerivation = new KeyScheduleDerivation(Hmac, keySizes.WriteKey, keySizes.WriteIV);
     }
+
+    public override KeysSizes KeysSizes => new(0, 16, 12);
 
     public override IHashFunction HashFunction => Sha256.Instance;
 

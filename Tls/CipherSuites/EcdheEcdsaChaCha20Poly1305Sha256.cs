@@ -1,31 +1,26 @@
-﻿using System;
-using System.Security.Cryptography;
-using NiL.Cryptography.EllipticCryptography;
-using NiL.Cryptography.EllipticCryptography.WeierstrassForm.Signature;
+﻿using NiL.Cryptography.EllipticCryptography;
 using NiL.Cryptography.Encryption;
 using NiL.Cryptography.Encryption.Modes;
-using NiL.Cryptography.Encryption.Modes.Gcm;
 using NiL.Cryptography.Hashing;
 using NiL.Cryptography.Signature;
 using NiL.Cryptography.Tls.Tls12;
-using NiL.Tools;
 
 namespace NiL.Cryptography.Tls.CipherSuites;
 
-[CipherSuiteId(CipherSuiteId.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)]
-public class EcdheEcdsaAes128GcmSha256 : Tls12CipherSuiteBase
+[CipherSuiteId(CipherSuiteId.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)]
+public class EcdheEcdsaChaCha20Poly1305Sha256 : Tls12CipherSuiteBase
 {
     private readonly EcdhKeyDerivation _derivationAlgorithm;
     private readonly ISignatureAlgorithm _signatureAlgorithm;
 
-    public EcdheEcdsaAes128GcmSha256(EcdhKeyDerivation keyDerivationAlgorithm, ISignatureAlgorithm signatureAlgorithm)
+    public EcdheEcdsaChaCha20Poly1305Sha256(EcdhKeyDerivation keyDerivationAlgorithm, ISignatureAlgorithm signatureAlgorithm)
     {
         _derivationAlgorithm = keyDerivationAlgorithm;
         _signatureAlgorithm = signatureAlgorithm;
 
         PseudoRandomFunction = new PseudoRandomFunction(Hmac, KeysSizes);
     }
-    public override KeysSizes KeysSizes => new(0, 16, 4);
+    public override KeysSizes KeysSizes => new(0, 32, 12);
     public override IHashFunction HashFunction => Sha256.Instance;
     public override IPreMasterKeyDerivationAlgorithm KeyExchangeAlgorithm => _derivationAlgorithm;
     public override ISignatureAlgorithm SignatureAlgorithm => _signatureAlgorithm;
@@ -39,8 +34,8 @@ public class EcdheEcdsaAes128GcmSha256 : Tls12CipherSuiteBase
             tlsVersion,
             keysSet,
             Hmac,
-            new GcmMode(new Encryption.Aes(keysSet.OurWriteKey)),
-            new GcmMode(new Encryption.Aes(keysSet.TheirWriteKey)),
-            false);
+            new Poly1305(new ChaCha20 { Key = keysSet.OurWriteKey, Nonce = new byte[12] }),
+            new Poly1305(new ChaCha20 { Key = keysSet.TheirWriteKey, Nonce = new byte[12] }),
+            true);
     }
 }

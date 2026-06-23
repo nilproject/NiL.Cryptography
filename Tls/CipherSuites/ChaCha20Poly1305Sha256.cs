@@ -13,8 +13,11 @@ public class ChaCha20Poly1305Sha256 : Tls13CipherSuiteBase
     public ChaCha20Poly1305Sha256(IPreMasterKeyDerivationAlgorithm derivationAlgorithm, ISignatureAlgorithm signatureAlgorithm)
         : base(derivationAlgorithm, signatureAlgorithm)
     {
-        KeyScheduleDerivation = new KeyScheduleDerivation(Hmac, 32, 12);
+        var keySizes = KeysSizes;
+        KeyScheduleDerivation = new KeyScheduleDerivation(Hmac, keySizes.WriteKey, keySizes.WriteIV);
     }
+
+    public override KeysSizes KeysSizes => new(0, 32, 12);
 
     public override IHashFunction HashFunction => Sha256.Instance;
 

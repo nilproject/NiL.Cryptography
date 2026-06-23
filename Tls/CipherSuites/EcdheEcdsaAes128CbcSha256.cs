@@ -16,6 +16,8 @@ public sealed class EcdheEcdsaAes128CbcSha256 : CbcCipherSuite
     {
     }
 
+    public override KeysSizes KeysSizes => new(0, 16, 12);
+
     public override IHashFunction HashFunction => Sha256.Instance;
 
     public override IEncryptDecryptProcessor CreateEncryptDecryptPair(KeysSet12 keysSet, TlsVersion tlsVersion)

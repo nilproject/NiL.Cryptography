@@ -10,8 +10,11 @@ public class TlsAes256GcmSha384 : TlsAes128GcmSha256
 {
     public TlsAes256GcmSha384(EcdhKeyDerivation keyDerivationAlgorithm, WeierstrassEcdsa ecdsa) : base(keyDerivationAlgorithm, ecdsa)
     {
-        KeyScheduleDerivation = new KeyScheduleDerivation(Hmac, 32, 12);
+        var keySizes = KeysSizes;
+        KeyScheduleDerivation = new KeyScheduleDerivation(Hmac, keySizes.WriteKey, keySizes.WriteIV);
     }
 
     public override IHashFunction HashFunction => Sha384.Instance;
+
+    public override KeysSizes KeysSizes => new(0, 32, 12);
 }
